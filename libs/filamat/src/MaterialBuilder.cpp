@@ -311,6 +311,11 @@ MaterialBuilder& MaterialBuilder::shadowMultiplier(bool shadowMultiplier) noexce
     return *this;
 }
 
+MaterialBuilder& MaterialBuilder::transparentShadow(bool transparentShadow) noexcept {
+    mTransparentShadow = transparentShadow;
+    return *this;
+}
+
 MaterialBuilder& MaterialBuilder::specularAntiAliasing(bool specularAntiAliasing) noexcept {
     mSpecularAntiAliasing = specularAntiAliasing;
     return *this;
@@ -452,6 +457,7 @@ void MaterialBuilder::prepareToBuild(MaterialInfo& info) noexcept {
     info.postLightingBlendingMode = mPostLightingBlendingMode;
     info.shading = mShading;
     info.hasShadowMultiplier = mShadowMultiplier;
+    info.hasTransparentShadow = mTransparentShadow;
     info.multiBounceAO = mMultiBounceAO;
     info.multiBounceAOSet = mMultiBounceAOSet;
     info.specularAO = mSpecularAO;
