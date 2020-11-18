@@ -632,7 +632,10 @@ bool MaterialBuilder::generateShaders(const std::vector<Variant>& variants, Chun
 
     bool emptyVertexCode = mMaterialVertexCode.getResolved().empty();
     bool customDepth = sg.hasCustomDepthShader() ||
-            mBlendingMode == BlendingMode::MASKED || !emptyVertexCode;
+            mBlendingMode == BlendingMode::MASKED ||
+            ((mBlendingMode == BlendingMode::TRANSPARENT ||mBlendingMode == BlendingMode::FADE) &&
+                    mTransparentShadow) ||
+            !emptyVertexCode;
     container.addSimpleChild<bool>(ChunkType::MaterialHasCustomDepthShader, customDepth);
 
     for (const auto& params : mCodeGenPermutations) {
