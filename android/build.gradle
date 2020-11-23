@@ -40,7 +40,7 @@
 //
 
 buildscript {
-    def filamentPath = file("../out/android-release/filament").absolutePath
+    def filamentPath = file("../out/android-relwithdebinfo/filament").absolutePath
     if (project.hasProperty("filament_dist_dir")) {
         filamentPath = file(project.property("filament_dist_dir")).absolutePath
     }

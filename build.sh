@@ -313,7 +313,7 @@ function build_android_arch {
     fi
 
     if [[ "${ISSUE_RELEASE_BUILD}" == "true" ]]; then
-        build_android_target "Release" "${arch}"
+        build_android_target "RelWithDebInfo" "${arch}"
     fi
 }
 
@@ -389,7 +389,7 @@ function build_android {
     fi
 
     if [[ "${ISSUE_RELEASE_BUILD}" == "true" ]]; then
-        archive_android "Release"
+        archive_android "RelWithDebInfo"
     fi
 
     cd android
@@ -428,7 +428,7 @@ function build_android {
 
     if [[ "${ISSUE_RELEASE_BUILD}" == "true" ]]; then
         ./gradlew \
-            -Pfilament_dist_dir=../out/android-release/filament \
+            -Pfilament_dist_dir=../out/android-relwithdebinfo/filament \
             -Pfilament_abis=${ABI_GRADLE_OPTION} \
             ${VULKAN_ANDROID_GRADLE_OPTION} \
             :filament-android:assembleRelease \
@@ -436,12 +436,12 @@ function build_android {
             :filament-utils-android:assembleRelease
 
         ./gradlew \
-            -Pfilament_dist_dir=../out/android-release/filament \
+            -Pfilament_dist_dir=../out/android-relwithdebinfo/filament \
             -Pfilament_abis=${ABI_GRADLE_OPTION} \
             :filamat-android:assembleRelease
 
         if [[ "${INSTALL_COMMAND}" ]]; then
-            echo "Installing out/filamat-android-release.aar..."
+            echo "Installing out/filamat-android-relwithdebinfo.aar..."
             cp filamat-android/build/outputs/aar/filamat-android-lite-release.aar ../out/
             cp filamat-android/build/outputs/aar/filamat-android-full-release.aar ../out/filamat-android-release.aar
 
