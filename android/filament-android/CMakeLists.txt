@@ -53,7 +53,7 @@ set(CMAKE_SHARED_LINKER_FLAGS_RELEASE "${CMAKE_SHARED_LINKER_FLAGS_RELEASE} -Wl,
 add_library(filament-jni SHARED
     src/main/cpp/Camera.cpp
     src/main/cpp/Colors.cpp
-    src/main/cpp/ColorGrading.cpp
+#     src/main/cpp/ColorGrading.cpp
     src/main/cpp/Engine.cpp
     src/main/cpp/EntityManager.cpp
     src/main/cpp/Fence.cpp

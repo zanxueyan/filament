@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#if 0
 #include <jni.h>
 
 #include <filament/ColorGrading.h>
@@ -170,3 +171,4 @@ Java_com_google_android_filament_ColorGrading_nBuilderCurves(JNIEnv* env, jclass
     env->ReleaseFloatArrayElements(midPoint_, midPoint, JNI_ABORT);
     env->ReleaseFloatArrayElements(scale_, scale, JNI_ABORT);
 }
+#endif

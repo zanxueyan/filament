@@ -46,14 +46,6 @@ Java_com_google_android_filament_View_nSetCamera(JNIEnv*, jclass,
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_com_google_android_filament_View_nSetColorGrading(JNIEnv*, jclass,
-        jlong nativeView, jlong nativeColorGrading) {
-    View* view = (View*) nativeView;
-    ColorGrading* colorGrading = (ColorGrading*) nativeColorGrading;
-    view->setColorGrading(colorGrading);
-}
-
-extern "C" JNIEXPORT void JNICALL
 Java_com_google_android_filament_View_nSetViewport(JNIEnv*, jclass,
         jlong nativeView, jint left, jint bottom, jint width, jint height) {
     View* view = (View*) nativeView;
@@ -134,15 +126,6 @@ extern "C" JNIEXPORT void JNICALL
 Java_com_google_android_filament_View_nSetShadowType(JNIEnv*, jclass, jlong nativeView, jint type) {
     View* view = (View*) nativeView;
     view->setShadowType((View::ShadowType) type);
-}
-
-extern "C" JNIEXPORT void JNICALL
-Java_com_google_android_filament_View_nSetVsmShadowOptions(JNIEnv*, jclass, jlong nativeView,
-        jint anisotropy) {
-    View* view = (View*) nativeView;
-    View::VsmShadowOptions options;
-    options.anisotropy = (uint8_t) anisotropy;
-    view->setVsmShadowOptions(options);
 }
 
 extern "C"
@@ -272,56 +255,9 @@ Java_com_google_android_filament_View_nSetBloomOptions(JNIEnv*, jclass,
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_com_google_android_filament_View_nSetFogOptions(JNIEnv *, jclass , jlong nativeView,
-        jfloat distance, jfloat maximumOpacity, jfloat height, jfloat heightFalloff, jfloat r,
-        jfloat g, jfloat b, jfloat density, jfloat inScatteringStart,
-        jfloat inScatteringSize, jboolean fogColorFromIbl, jboolean enabled) {
-    View* view = (View*) nativeView;
-    View::FogOptions options = {
-             .distance = distance,
-             .maximumOpacity = maximumOpacity,
-             .height = height,
-             .heightFalloff = heightFalloff,
-             .color = math::float3{r, g, b},
-             .density = density,
-             .inScatteringStart = inScatteringStart,
-             .inScatteringSize = inScatteringSize,
-             .fogColorFromIbl = (bool)fogColorFromIbl,
-             .enabled = (bool)enabled
-    };
-    view->setFogOptions(options);
-}
-
-extern "C" JNIEXPORT void JNICALL
 Java_com_google_android_filament_View_nSetBlendMode(JNIEnv *, jclass , jlong nativeView, jint blendMode) {
     View* view = (View*) nativeView;
     view->setBlendMode((View::BlendMode)blendMode);
-}
-
-extern "C" JNIEXPORT void JNICALL
-Java_com_google_android_filament_View_nSetDepthOfFieldOptions(JNIEnv *, jclass ,
-        jlong nativeView, jfloat focusDistance, jfloat cocScale, jfloat maxApertureDiameter, jboolean enabled) {
-    View* view = (View*) nativeView;
-    view->setDepthOfFieldOptions({.focusDistance = focusDistance, .cocScale = cocScale,
-            .maxApertureDiameter = maxApertureDiameter, .enabled = (bool)enabled});
-}
-
-extern "C"
-JNIEXPORT void JNICALL
-Java_com_google_android_filament_View_nSetVignetteOptions(JNIEnv*, jclass, jlong nativeView, jfloat midPoint, jfloat roundness,
-        jfloat feather, jfloat r, jfloat g, jfloat b, jfloat a, jboolean enabled) {
-    View* view = (View*) nativeView;
-    view->setVignetteOptions({.midPoint = midPoint, .roundness = roundness, .feather = feather,
-            .color = LinearColorA{r, g, b, a}, .enabled = (bool)enabled});
-}
-
-extern "C"
-JNIEXPORT void JNICALL
-Java_com_google_android_filament_View_nSetTemporalAntiAliasingOptions(JNIEnv *, jclass,
-        jlong nativeView, jfloat feedback, jfloat filterWidth, jboolean enabled) {
-    View* view = (View*) nativeView;
-    view->setTemporalAntiAliasingOptions({
-            .filterWidth = filterWidth, .feedback = feedback, .enabled = (bool) enabled});
 }
 
 extern "C"
@@ -329,20 +265,4 @@ JNIEXPORT jboolean JNICALL
 Java_com_google_android_filament_View_nIsShadowingEnabled(JNIEnv *, jclass, jlong nativeView) {
     View* view = (View*) nativeView;
     return (jboolean)view->isShadowingEnabled();
-}
-
-extern "C"
-JNIEXPORT void JNICALL
-Java_com_google_android_filament_View_nSetScreenSpaceRefractionEnabled(JNIEnv *, jclass,
-        jlong nativeView, jboolean enabled) {
-    View* view = (View*) nativeView;
-    view->setScreenSpaceRefractionEnabled((bool)enabled);
-}
-
-extern "C"
-JNIEXPORT jboolean JNICALL
-Java_com_google_android_filament_View_nIsScreenSpaceRefractionEnabled(JNIEnv *, jclass,
-        jlong nativeView) {
-    View* view = (View*) nativeView;
-    return (jboolean)view->isScreenSpaceRefractionEnabled();
 }
