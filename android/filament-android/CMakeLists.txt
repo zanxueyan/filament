@@ -1,7 +1,22 @@
-cmake_minimum_required(VERSION 3.6)
+cmake_minimum_required(VERSION 3.9)
+
+# Note that LTO for clang is supported by CMake 3.9 and higher.
+# This is fine since the Android SDK includes CMake 3.10.  This saves 8 KiB.
+option(FILAMENT_ENABLE_LTO "Enable link-time optimizations if supported by the compiler" ON)
 
 option(FILAMENT_SUPPORTS_VULKAN "Enables Vulkan on Android" OFF)
 option(FILAMENT_ENABLE_MATDBG "Enables Material debugger" OFF)
+
+if (FILAMENT_ENABLE_LTO)
+    include(CheckIPOSupported)
+
+    check_ipo_supported(RESULT IPO_SUPPORT)
+
+    if (IPO_SUPPORT)
+        message(STATUS "LTO support is enabled")
+        set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
+    endif()
+endif()
 
 set(FILAMENT_DIR ${FILAMENT_DIST_DIR})
 
