@@ -64,6 +64,9 @@ Options:
        Append a null terminator to each data blob
    --cfile, -c
        Generate xxd-style C file (useful for WebAssembly)
+   --json, -j
+       Embed a JSON string in the output that provides a summary
+       of all resource sizes and names. Useful for size analysis.
     --quiet, -q
         Suppress console output
 
