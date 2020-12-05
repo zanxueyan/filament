@@ -6,10 +6,6 @@ For usage help:
 
 Examples:
     python3 tools/fardiff/fardiff.py libfilament-jni.so
-
-    ./tools/fardiff/fardiff.py android/filament-android
-    ./tools/fardiff/fardiff.py ../filasize/velvet_dev/pristine/velvet_dev_pristine.zip
-
 """
 
 import argparse

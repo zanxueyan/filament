@@ -18,9 +18,17 @@ by typing this from the Filament root:
 
 You can also compare two files:
 
-    ./tools/fardiff/fardiff.py -o comparison.html old.apk new.apk
+    ./tools/fardiff/fardiff.py --output=comparison.html old.apk new.apk
     open comparison.html
 
 This tool uses Python, `nm`, and `objdump`. To make it easy to use on any machine, there is a
 `Dockerfile` provided that installs dependencies inside a Linux container, plus a bash
 script that invokes docker for you. Simply use `fardiff.sh` instead of `fardiff.py`.
+
+## TODO items
+
+- Get it to succeed on velvet zip
+- Where is .rodata?
+- resgen --json
+- side-by-side support
+- Runnable on mac
