@@ -1,13 +1,9 @@
 <!DOCTYPE html>
-<title>binary size</title>
-
-<script>
-$BLOAT_JSON$
-</script>
-
+<html>
+<head>
+<title>$TITLE$</title>
+<link rel="stylesheet" href="https://prideout.net/webtreemap/webtreemap.css">
 <style>
-
-$WEBTREEMAP_CSS$
 
 body {
   font-family: sans-serif;
@@ -26,26 +22,36 @@ h2 {
   margin-top: 4ex;
 }
 
-#map {
+#legend {
+  width: 800px;
+}
+
+.diagram {
   width: 800px;
   height: 600px;
-
   position: relative;
   cursor: pointer;
   -webkit-user-select: none;
 }
 
-#legend {
-  width: 800px;
-  padding-top: 10px;
-}
 </style>
+</head>
+<body>
 
-<h1>binary size</h1>
+<h1>$TITLE$</h1>
 
-<p>Click on a box to zoom in.  Click on the outermost box to zoom out.</p>
+<p>$INFO$</p>
 
-<div id='map'></div>
+Try clicking around in the two treemap diagrams below.
+
+<ul>
+  <li> All sizes are decimal (i.e. kilobytes instead of kibibytes). </li>
+  <li>
+    If Filament resources are built with <tt>resgen --json</tt>, then materials will
+    appear in the rodata portion of the sections diagram.
+  </li>
+</p>
+
 <div id='legend'>
 <div class='webtreemap-symbol-bss'>bss</div>
 <div class='webtreemap-symbol-bss webtreemap-aggregate'>bss aggregate</div>
@@ -59,11 +65,21 @@ h2 {
 <div class='webtreemap-symbol-weak_symbol webtreemap-aggregate'>weak symbol aggregate</div>
 </div>
 
+<div class="diagram" id="symbols"></div>
+
+<div class="diagram" id="sections"></div>
+
+<script src="https://prideout.net/webtreemap/webtreemap.js"></script>
+
 <script>
 
-$WEBTREEMAP_JS$
+$SYMBOLS_JSON$
 
-var map = document.getElementById('map');
-appendTreemap(map, kTree);
+$SECTIONS_JSON$
+
+appendTreemap(document.getElementById('symbols'), kSymbols);
+appendTreemap(document.getElementById('sections'), kSections.children[1]);
 
 </script>
+</body>
+</html>

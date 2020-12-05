@@ -1,3 +1,11 @@
+# To run the image and mount the current directory:
+#   docker run --rm -it -v `pwd`:/filament -t fardiff
+
+# Then, inside the container:
+#   ./tools/fardiff/fardiff.py my_favorite_app.apk
+#
+# To make this easier, see fardiff.sh
+
 FROM ubuntu:focal
 ARG DEBIAN_FRONTEND=noninteractive
 

@@ -273,7 +273,10 @@ def jsonify_tree(tree, name):
         else:
             (size, symbols) = val
             total += size
-            assert len(symbols) == 1, symbols.values()[0] == 1
+
+            # TODO: Removed this assert, unsure of its meaning. (prideout)
+            #assert len(symbols) == 1, symbols.values()[0] == 1
+
             symbol = symbol_type_to_human(symbols.keys()[0])
             children.append({
                     'name': key + ' ' + format_bytes(size),
@@ -301,8 +304,8 @@ def jsonify_tree(tree, name):
 
 def dump_nm(nmfile, strip_prefix, cppfilt):
     dirs = treeify_syms(parse_nm(nmfile), strip_prefix, cppfilt)
-    print ('var kTree = ' +
-           json.dumps(jsonify_tree(dirs, '[everything]'), indent=2))
+    print ('const kSymbols = ' +
+           json.dumps(jsonify_tree(dirs, '[everything]')) + ';\n')
 
 
 def parse_objdump(input):
@@ -351,10 +354,10 @@ def dump_sections(objdump):
     sections = jsonify_sections('sections', sections)
     debug_sections = jsonify_sections('debug', debug_sections)
     size = sections['data']['$area'] + debug_sections['data']['$area']
-    print 'var kTree = ' + json.dumps({
+    print('const kSections = ' + json.dumps({
             'name': 'top ' + format_bytes(size),
             'data': { '$area': size },
-            'children': [ debug_sections, sections ]})
+            'children': [ debug_sections, sections ]}) + ';\n')
 
 
 usage="""%prog [options] MODE
