@@ -141,6 +141,232 @@ static std::string shrinkString(const std::string& s) {
     return r;
 }
 
+static bool isIdCharNondigit(char c) {
+    return c == '_' || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
+}
+
+static bool isIdChar(char c) {
+    return isIdCharNondigit(c) || (c >= '0' && c <= '9');
+};
+
+// Checks if a GLSL identifier lives at the given index in the given codeline.
+// If so, writes the identifier into "id" and moves the given index to point
+// to the first character after the identifier.
+static bool consumeIdentifier(std::string_view codeline, size_t* pindex, std::string_view* id) {
+    size_t index = *pindex;
+    if (index >= codeline.size()) {
+        return false;
+    }
+    if (!isIdCharNondigit(codeline[index])) {
+        return false;
+    }
+    ++index;
+    while (index < codeline.size() && isIdChar(codeline[index])) {
+        ++index;
+    }
+    *id = codeline.substr(*pindex, index - *pindex);
+    *pindex = index;
+    return true;
+}
+
+// Checks if the given string lives at the given index in the given codeline.
+// If so, moves the given index to point to the first character after the string.
+static bool consumeString(std::string_view codeline, size_t* pindex, std::string_view s) {
+    size_t index = codeline.find(s, *pindex);
+    if (index == std::string_view::npos) {
+        return false;
+    }
+    *pindex = index + s.size();
+    return true;
+}
+
+// Checks if the given string lives has an array size at the given codeline.
+// If so, moves the given index to point to the first character after the array size.
+static void consumeArraySize(std::string_view codeline, size_t* pindex) {
+    size_t index = *pindex;
+    if (index >= codeline.size()) {
+        return;
+    }
+    if (codeline[index] != '[') {
+        return;
+    }
+    ++index;
+    while (index < codeline.size() && codeline[index] != ']') {
+        ++index;
+    }
+    *pindex = (index == codeline.size()) ? index : index + 1;
+    return;
+}
+
+static void replaceAll(std::string& result, std::string from, std::string to) {
+    size_t n = 0;
+    while ((n = result.find(from, n)) != std::string::npos) {
+        result.replace(n, from.size(), to);
+        n += to.size();
+    }
+}
+
+// Uniform block definitions can be quite big so this compresses them as follows.
+// First, the uniform struct definitions are found, new field names are generated, and a mapping
+// table is built. Second, all uses are replaced via the mapping table.
+//
+// This does NOT apply to MaterialParams structs.
+//
+// The struct definition must be a sequence of tokens with the following pattern:
+//
+//     "uniform " IgnoreableIdentifier
+//     {
+//     TypeIdentifier SPACE FieldIdentifier OptionalArraySize ;
+//     TypeIdentifier SPACE FieldIdentifier OptionalArraySize ;
+//     TypeIdentifier SPACE FieldIdentifier OptionalArraySize ;
+//     } StructIdentifier ;
+//
+static std::string minifyStructFields(const std::string& source) {
+    // Split the string into separate string views at each newline.
+    std::string_view sv = source;
+    std::vector<std::string_view> codelines;
+    size_t first = 0;
+    while (first < sv.size()) {
+        const size_t second = sv.find_first_of('\n', first);
+        if (first != second) {
+            codelines.emplace_back(sv.substr(first, second - first));
+        }
+        if (second == std::string_view::npos) {
+            break;
+        }
+        first = second + 1;
+    }
+
+    // Build remapping table.
+    enum {OUTSIDE, STRUCT_OPEN, STRUCT_DEFN} state = OUTSIDE;
+    std::string currentStruct;
+    std::vector<std::string_view> fields;
+    std::unordered_map<std::string, std::string> fieldMapping;
+    std::unordered_map<std::string, std::string> currentStructToName;
+    for (std::string_view codeline : codelines) {
+        size_t index = 0;
+        std::string_view structName;
+        std::string_view typeId;
+        std::string_view fieldId;
+        switch (state) {
+            case OUTSIDE: {
+                if (!consumeString(codeline, &index, "uniform ")) {
+                    continue;
+                }
+                if (!consumeIdentifier(codeline, &index, &typeId)) {
+                    continue;
+                }
+                if (index == codeline.size()) {
+                    currentStruct = std::string(typeId);
+                    state = STRUCT_OPEN;
+                }
+                break;
+            }
+            case STRUCT_OPEN:
+                state = (codeline[0] == '{' && codeline.size() == 1) ? STRUCT_DEFN : OUTSIDE;
+                break;
+            case STRUCT_DEFN:
+                if (consumeString(codeline, &index, "} ")) {
+                    if (!consumeIdentifier(codeline, &index, &structName)) {
+                        break;
+                    }
+                    if (!consumeString(codeline, &index, ";") || index != codeline.size()) {
+                        break;
+                    }
+                    std::string structNameS(structName);
+                    currentStructToName[currentStruct] = structNameS;
+                    std::string generatedFieldName = "a";
+                    for (auto field : fields) {
+                        const std::string key = structNameS + "." + std::string(field);
+                        const std::string val = structNameS + "." + generatedFieldName;
+                        fieldMapping[key] = val;
+                        if (generatedFieldName[0] == 'z') {
+                            generatedFieldName = "a" + generatedFieldName;
+                        } else {
+                            generatedFieldName[0]++;
+                        }
+                    }
+                    fields.clear();
+                    state = OUTSIDE;
+                    break;
+                }
+                if (!consumeIdentifier(codeline, &index, &typeId)) {
+                    break;
+                } else if (codeline[index++] != ' ')  {
+                    break;
+                } else if (!consumeIdentifier(codeline, &index, &fieldId)) {
+                    break;
+                } else if (codeline[index++] != ';')  {
+                    break;
+                } else if (index != codeline.size()) {
+                    break;
+                }
+                fields.push_back(fieldId);
+                break;
+        }
+    }
+
+    std::string result;
+    result.reserve(source.length());
+
+    // Apply remapping table.
+    state = OUTSIDE;
+    for (std::string_view codeline : codelines) {
+        std::string newline(codeline);
+        size_t index = 0;
+        std::string_view structName;
+        std::string_view typeId;
+        std::string_view fieldId;
+        switch (state) {
+            case OUTSIDE: {
+                if (consumeString(codeline, &index, "uniform ") &&
+                        consumeIdentifier(codeline, &index, &typeId) && index == codeline.size()) {
+                    currentStruct = std::string(typeId);
+                    state = STRUCT_OPEN;
+                    break;
+                }
+                for (const auto& key : fieldMapping) {
+                    replaceAll(newline, key.first, key.second);
+                }
+                break;
+            }
+            case STRUCT_OPEN:
+                state = (codeline[0] == '{' && codeline.size() == 1) ? STRUCT_DEFN : OUTSIDE;
+                break;
+            case STRUCT_DEFN:
+                if (consumeString(codeline, &index, "} ")) {
+                    if (!consumeIdentifier(codeline, &index, &structName)) {
+                        break;
+                    }
+                    if (!consumeString(codeline, &index, ";") || index != codeline.size()) {
+                        break;
+                    }
+                    state = OUTSIDE;
+                    break;
+                }
+                if (!consumeIdentifier(codeline, &index, &typeId)) {
+                    break;
+                } else if (codeline[index++] != ' ')  {
+                    break;
+                } else if (!consumeIdentifier(codeline, &index, &fieldId)) {
+                    break;
+                } else if (codeline[index++] != ';')  {
+                    break;
+                } else if (index != codeline.size()) {
+                    break;
+                }
+                const std::string key = currentStructToName[currentStruct] + "." + std::string(fieldId);
+                const std::string_view val(fieldMapping[key]);
+                const std::string fieldName(val.substr(val.find(".") + 1));
+                newline = std::string(typeId) + " " + fieldName + ";";
+                break;
+        }
+        result += newline + "\n";
+    }
+
+    return result;
+}
+
 void SpvToMsl(const SpirvBlob* spirv, std::string* outMsl, const GLSLPostProcessor::Config& config) {
     CompilerMSL mslCompiler(*spirv);
     CompilerGLSL::Options options;
@@ -263,6 +489,7 @@ bool GLSLPostProcessor::process(const std::string& inputShader, Config const& co
 
     if (mGlslOutput) {
         *mGlslOutput = shrinkString(*mGlslOutput);
+        *mGlslOutput = minifyStructFields(*mGlslOutput);
         if (mPrintShaders) {
             utils::slog.i << *mGlslOutput << utils::io::endl;
         }
