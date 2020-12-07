@@ -403,7 +403,7 @@ endif()
 if (CMAKE_BUILD_TYPE STREQUAL "Debug" AND IS_HOST_PLATFORM)
     option(FILAMENT_ENABLE_MATDBG "Enable the material debugger" ON)
 else()
-    option(FILAMENT_ENABLE_MATDBG "Enable the material debugger" OFF)
+    option(FILAMENT_ENABLE_MATDBG "Enable the material debugger" ON)
 endif()
 
 # ==================================================================================================
