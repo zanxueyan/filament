@@ -198,9 +198,9 @@ public:
      *      \right)
      *      \f$
      */
-    template<typename A, typename B, typename C, typename D>
-    constexpr TMat44(const TVec4<A>& v0, const TVec4<B>& v1, const TVec4<C>& v2,
-            const TVec4<D>& v3) noexcept;
+    template<typename ColumnType>
+    constexpr TMat44(const TVec4<ColumnType>& v0, const TVec4<ColumnType>& v1, const TVec4<ColumnType>& v2,
+            const TVec4<ColumnType>& v3) noexcept;
 
     /** construct from 16 elements in column-major form.
      *
@@ -215,27 +215,22 @@ public:
      *      \right)
      *      \f$
      */
-    template<
-            typename A, typename B, typename C, typename D,
-            typename E, typename F, typename G, typename H,
-            typename I, typename J, typename K, typename L,
-            typename M, typename N, typename O, typename P>
-    constexpr explicit TMat44(A m00, B m01, C m02, D m03,
-            E m10, F m11, G m12, H m13,
-            I m20, J m21, K m22, L m23,
-            M m30, N m31, O m32, P m33) noexcept;
+    template<typename ScalarType>
+    constexpr explicit TMat44(
+            ScalarType m00, ScalarType m01, ScalarType m02, ScalarType m03,
+            ScalarType m10, ScalarType m11, ScalarType m12, ScalarType m13,
+            ScalarType m20, ScalarType m21, ScalarType m22, ScalarType m23,
+            ScalarType m30, ScalarType m31, ScalarType m32, ScalarType m33) noexcept;
 
 
+    // Use the same typename for all 16 arguments to reduce permutation bloat.
     struct row_major_init {
-        template<
-                typename A, typename B, typename C, typename D,
-                typename E, typename F, typename G, typename H,
-                typename I, typename J, typename K, typename L,
-                typename M, typename N, typename O, typename P>
-        constexpr explicit row_major_init(A m00, B m01, C m02, D m03,
-                E m10, F m11, G m12, H m13,
-                I m20, J m21, K m22, L m23,
-                M m30, N m31, O m32, P m33) noexcept
+        template<typename ScalarType>
+        constexpr explicit row_major_init(
+                ScalarType m00, ScalarType m01, ScalarType m02, ScalarType m03,
+                ScalarType m10, ScalarType m11, ScalarType m12, ScalarType m13,
+                ScalarType m20, ScalarType m21, ScalarType m22, ScalarType m23,
+                ScalarType m30, ScalarType m31, ScalarType m32, ScalarType m33) noexcept
                 : m(m00, m10, m20, m30,
                 m01, m11, m21, m31,
                 m02, m12, m22, m32,
@@ -300,8 +295,8 @@ public:
     };
     static TMat44 perspective(T fov, T aspect, T near, T far, Fov direction = Fov::VERTICAL) noexcept;
 
-    template<typename A, typename B, typename C>
-    static TMat44 lookAt(const TVec3<A>& eye, const TVec3<B>& center, const TVec3<C>& up) noexcept;
+    template<typename V>
+    static TMat44 lookAt(const TVec3<V>& eye, const TVec3<V>& center, const TVec3<V>& up) noexcept;
 
     template<typename A>
     static constexpr TVec3<A> project(const TMat44& projectionMatrix, TVec3<A> vertice) noexcept{
@@ -382,15 +377,12 @@ constexpr TMat44<T>::TMat44(const TVec4<U>& v) noexcept
 
 // construct from 16 scalars
 template<typename T>
-template<
-        typename A, typename B, typename C, typename D,
-        typename E, typename F, typename G, typename H,
-        typename I, typename J, typename K, typename L,
-        typename M, typename N, typename O, typename P>
-constexpr TMat44<T>::TMat44(A m00, B m01, C m02, D m03,
-        E m10, F m11, G m12, H m13,
-        I m20, J m21, K m22, L m23,
-        M m30, N m31, O m32, P m33) noexcept
+template<typename ScalarType>
+constexpr TMat44<T>::TMat44(
+        ScalarType m00, ScalarType m01, ScalarType m02, ScalarType m03,
+        ScalarType m10, ScalarType m11, ScalarType m12, ScalarType m13,
+        ScalarType m20, ScalarType m21, ScalarType m22, ScalarType m23,
+        ScalarType m30, ScalarType m31, ScalarType m32, ScalarType m33) noexcept
         : m_value{
         col_type(m00, m01, m02, m03),
         col_type(m10, m11, m12, m13),
@@ -408,9 +400,10 @@ constexpr TMat44<T>::TMat44(const TMat44<U>& rhs) noexcept {
 
 // Construct from 4 column vectors.
 template<typename T>
-template<typename A, typename B, typename C, typename D>
-constexpr TMat44<T>::TMat44(const TVec4<A>& v0, const TVec4<B>& v1,
-        const TVec4<C>& v2, const TVec4<D>& v3) noexcept
+template<typename ColumnType>
+constexpr TMat44<T>::TMat44(
+        const TVec4<ColumnType>& v0, const TVec4<ColumnType>& v1,
+        const TVec4<ColumnType>& v2, const TVec4<ColumnType>& v3) noexcept
         : m_value{ v0, v1, v2, v3 } {
 }
 
@@ -521,9 +514,9 @@ TMat44<T> TMat44<T>::perspective(T fov, T aspect, T near, T far, TMat44::Fov dir
  * looking at and "up" defines where the Y axis of the camera's local coordinate system is.
  */
 template<typename T>
-template<typename A, typename B, typename C>
-TMat44<T> TMat44<T>::lookAt(const TVec3<A>& eye, const TVec3<B>& center,
-        const TVec3<C>& up) noexcept {
+template<typename VecType>
+TMat44<T> TMat44<T>::lookAt(const TVec3<VecType>& eye, const TVec3<VecType>& center,
+        const TVec3<VecType>& up) noexcept {
     TVec3<T> z_axis(normalize(center - eye));
     TVec3<T> norm_up(normalize(up));
     if (std::abs(dot(z_axis, norm_up)) > T(0.999)) {
