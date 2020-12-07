@@ -309,6 +309,18 @@ static std::string minifyStructFields(const std::string& source) {
     std::string result;
     result.reserve(source.length());
 
+    // Build a list of field keys, ordered from longest to shortest.
+    // For example, we want to replace "fogColorFromIbl" before replacing "fogColor".
+    std::vector<std::string> fieldMappingKeys;
+    fieldMappingKeys.reserve(fieldMapping.size());
+    for (const auto& iter : fieldMapping) {
+        fieldMappingKeys.push_back(iter.first);
+    }
+    const auto& compare = [](const std::string_view& a, const std::string_view& b) {
+        return a.length() > b.length();
+    };
+    std::sort(fieldMappingKeys.begin(), fieldMappingKeys.end(), compare);
+
     // Apply remapping table.
     state = OUTSIDE;
     for (std::string_view codeline : codelines) {
@@ -325,8 +337,8 @@ static std::string minifyStructFields(const std::string& source) {
                     state = STRUCT_OPEN;
                     break;
                 }
-                for (const auto& key : fieldMapping) {
-                    replaceAll(newline, key.first, key.second);
+                for (const auto& key : fieldMappingKeys) {
+                    replaceAll(newline, key, fieldMapping[key]);
                 }
                 break;
             }
