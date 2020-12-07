@@ -196,8 +196,8 @@ public:
      *      \right)
      *      \f$
      */
-    template<typename A, typename B, typename C>
-    constexpr TMat33(const TVec3<A>& v0, const TVec3<B>& v1, const TVec3<C>& v2) noexcept;
+    template<typename ColumnType>
+    constexpr TMat33(const TVec3<ColumnType>& v0, const TVec3<ColumnType>& v1, const TVec3<ColumnType>& v2) noexcept;
 
     /** construct from 9 elements in column-major form.
      *
@@ -211,23 +211,19 @@ public:
      *      \right)
      *      \f$
      */
-    template<
-            typename A, typename B, typename C,
-            typename D, typename E, typename F,
-            typename G, typename H, typename I>
-    constexpr explicit TMat33(A m00, B m01, C m02,
-            D m10, E m11, F m12,
-            G m20, H m21, I m22) noexcept;
+    template<typename ScalarType>
+    constexpr explicit TMat33(
+            ScalarType m00, ScalarType m01, ScalarType m02,
+            ScalarType m10, ScalarType m11, ScalarType m12,
+            ScalarType m20, ScalarType m21, ScalarType m22) noexcept;
 
 
     struct row_major_init {
-        template<
-                typename A, typename B, typename C,
-                typename D, typename E, typename F,
-                typename G, typename H, typename I>
-        constexpr explicit row_major_init(A m00, B m01, C m02,
-                D m10, E m11, F m12,
-                G m20, H m21, I m22) noexcept
+        template<typename ScalarType>
+        constexpr explicit row_major_init(
+                ScalarType m00, ScalarType m01, ScalarType m02,
+                ScalarType m10, ScalarType m11, ScalarType m12,
+                ScalarType m20, ScalarType m21, ScalarType m22) noexcept
                 : m(m00, m10, m20,
                 m01, m11, m21,
                 m02, m12, m22) {}
@@ -356,13 +352,11 @@ constexpr TMat33<T>::TMat33(const TVec3<U>& v) noexcept
 // of values in the constructor is the transpose of the matrix
 // notation.
 template<typename T>
-template<
-        typename A, typename B, typename C,
-        typename D, typename E, typename F,
-        typename G, typename H, typename I>
-constexpr TMat33<T>::TMat33(A m00, B m01, C m02,
-        D m10, E m11, F m12,
-        G m20, H m21, I m22) noexcept
+template<typename ScalarType>
+constexpr TMat33<T>::TMat33(
+        ScalarType m00, ScalarType m01, ScalarType m02,
+        ScalarType m10, ScalarType m11, ScalarType m12,
+        ScalarType m20, ScalarType m21, ScalarType m22) noexcept
         : m_value{
         col_type(m00, m01, m02),
         col_type(m10, m11, m12),
@@ -379,8 +373,8 @@ constexpr TMat33<T>::TMat33(const TMat33<U>& rhs) noexcept {
 
 // Construct from 3 column vectors.
 template<typename T>
-template<typename A, typename B, typename C>
-constexpr TMat33<T>::TMat33(const TVec3<A>& v0, const TVec3<B>& v1, const TVec3<C>& v2) noexcept
+template<typename ColumnType>
+constexpr TMat33<T>::TMat33(const TVec3<ColumnType>& v0, const TVec3<ColumnType>& v1, const TVec3<ColumnType>& v2) noexcept
         : m_value{ v0, v1, v2 } {
 }
 
