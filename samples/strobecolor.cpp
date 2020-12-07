@@ -45,7 +45,7 @@ int main(int argc, char** argv) {
         float r = 0.5f + 0.5f * std::sin(SPEED * now);
         float g = 0.5f + 0.5f * std::sin(SPEED * now + M_PI * 2 / 3);
         float b = 0.5f + 0.5f * std::sin(SPEED * now + M_PI * 4 / 3);
-        skybox->setColor({r, g, b, 1.0});
+        skybox->setColor({r, g, b, 1.0f});
     });
 
     FilamentApp::get().run(config, setup, cleanup);

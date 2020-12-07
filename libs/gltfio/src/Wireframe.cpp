@@ -78,14 +78,14 @@ Wireframe::Wireframe(FFilamentAsset* asset) : mAsset(asset) {
             mat4f worldTransform = tm.getWorldTransform(transformable);
 
             // Write coordinates for the 8 corners of the cuboid.
-            pvert[0] = (worldTransform * float4(minpt.x, minpt.y, minpt.z, 1.0)).xyz;
-            pvert[1] = (worldTransform * float4(minpt.x, minpt.y, maxpt.z, 1.0)).xyz;
-            pvert[2] = (worldTransform * float4(minpt.x, maxpt.y, minpt.z, 1.0)).xyz;
-            pvert[3] = (worldTransform * float4(minpt.x, maxpt.y, maxpt.z, 1.0)).xyz;
-            pvert[4] = (worldTransform * float4(maxpt.x, minpt.y, minpt.z, 1.0)).xyz;
-            pvert[5] = (worldTransform * float4(maxpt.x, minpt.y, maxpt.z, 1.0)).xyz;
-            pvert[6] = (worldTransform * float4(maxpt.x, maxpt.y, minpt.z, 1.0)).xyz;
-            pvert[7] = (worldTransform * float4(maxpt.x, maxpt.y, maxpt.z, 1.0)).xyz;
+            pvert[0] = (worldTransform * float4(minpt.x, minpt.y, minpt.z, 1.0f)).xyz;
+            pvert[1] = (worldTransform * float4(minpt.x, minpt.y, maxpt.z, 1.0f)).xyz;
+            pvert[2] = (worldTransform * float4(minpt.x, maxpt.y, minpt.z, 1.0f)).xyz;
+            pvert[3] = (worldTransform * float4(minpt.x, maxpt.y, maxpt.z, 1.0f)).xyz;
+            pvert[4] = (worldTransform * float4(maxpt.x, minpt.y, minpt.z, 1.0f)).xyz;
+            pvert[5] = (worldTransform * float4(maxpt.x, minpt.y, maxpt.z, 1.0f)).xyz;
+            pvert[6] = (worldTransform * float4(maxpt.x, maxpt.y, minpt.z, 1.0f)).xyz;
+            pvert[7] = (worldTransform * float4(maxpt.x, maxpt.y, maxpt.z, 1.0f)).xyz;
 
             uint32_t i = pvert - verts;
             pvert += 8;

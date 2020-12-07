@@ -630,7 +630,7 @@ TYPED_TEST(MatTestT, Translation4) {
     V4T p1(9.9, 3.1, 41.1, 1.0);
     V4T p2(-18.0, 0.0, 1.77, 1.0);
     V4T p3(0, 0, 0, 1);
-    V4T p4(-1000, -1000, 1000, 1.0);
+    V4T p4(-1000, -1000, 1000, 1);
 
     EXPECT_VEC_EQ((translation_matrix * p1).xyz, translateBy + p1.xyz);
     EXPECT_VEC_EQ((translation_matrix * p2).xyz, translateBy + p2.xyz);
@@ -655,7 +655,7 @@ TYPED_TEST(MatTestT, Scale4) {
     V4T p1(9.9, 3.1, 41.1, 1.0);
     V4T p2(-18.0, 0.0, 1.77, 1.0);
     V4T p3(0, 0, 0, 1);
-    V4T p4(-1000, -1000, 1000, 1.0);
+    V4T p4(-1000, -1000, 1000, 1);
 
     EXPECT_VEC_EQ((scale_matrix * p1).xyz, scaleBy * p1.xyz);
     EXPECT_VEC_EQ((scale_matrix * p2).xyz, scaleBy * p2.xyz);
@@ -807,7 +807,7 @@ TYPED_TEST(MatTestT, ToQuaternionPointTransformation44) {
         QuatT qr = r.toQuaternion();
         V3T p(rand_gen(), rand_gen(), rand_gen());
 
-        V4T pr = r * V4T(p.x, p.y, p.z, 1);
+        V4T pr = r * V4T(p.x, p.y, p.z, (TypeParam)1);
         pr.x /= pr.w;
         pr.y /= pr.w;
         pr.z /= pr.w;

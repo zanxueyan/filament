@@ -169,12 +169,12 @@ inline filament::math::float3 Cubemap::getDirectionFor(Face face, float x, float
     filament::math::float3 dir;
     const float l = std::sqrt(cx * cx + cy * cy + 1);
     switch (face) {
-        case Face::PX:  dir = {   1, cy, -cx }; break;
-        case Face::NX:  dir = {  -1, cy,  cx }; break;
-        case Face::PY:  dir = {  cx,  1, -cy }; break;
-        case Face::NY:  dir = {  cx, -1,  cy }; break;
-        case Face::PZ:  dir = {  cx, cy,   1 }; break;
-        case Face::NZ:  dir = { -cx, cy,  -1 }; break;
+        case Face::PX:  dir = {  1.0f,  cy, -cx }; break;
+        case Face::NX:  dir = { -1.0f,  cy,  cx }; break;
+        case Face::PY:  dir = {  cx,  1.0f, -cy }; break;
+        case Face::NY:  dir = {  cx, -1.0f,  cy }; break;
+        case Face::PZ:  dir = {  cx,  cy,  1.0f }; break;
+        case Face::NZ:  dir = { -cx,  cy, -1.0f }; break;
     }
     return dir * (1 / l);
 }

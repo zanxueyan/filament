@@ -382,13 +382,13 @@ void ArrowWidget::createArrow() {
         s_ArrowTri[ARROW_CYL].push_back(float3(x1, CYL_RADIUS*y0, CYL_RADIUS*z0));
         s_ArrowTri[ARROW_CYL].push_back(float3(x0, CYL_RADIUS*y1, CYL_RADIUS*z1));
         s_ArrowTri[ARROW_CYL].push_back(float3(x1, CYL_RADIUS*y1, CYL_RADIUS*z1));
-        s_ArrowNorm[ARROW_CYL].push_back(float3(0, y0, z0));
-        s_ArrowNorm[ARROW_CYL].push_back(float3(0, y0, z0));
-        s_ArrowNorm[ARROW_CYL].push_back(float3(0, y1, z1));
-        s_ArrowNorm[ARROW_CYL].push_back(float3(0, y0, z0));
-        s_ArrowNorm[ARROW_CYL].push_back(float3(0, y1, z1));
-        s_ArrowNorm[ARROW_CYL].push_back(float3(0, y1, z1));
-        s_ArrowTri[ARROW_CYL_CAP].push_back(float3(x0, 0, 0));
+        s_ArrowNorm[ARROW_CYL].push_back(float3(0.0f, y0, z0));
+        s_ArrowNorm[ARROW_CYL].push_back(float3(0.0f, y0, z0));
+        s_ArrowNorm[ARROW_CYL].push_back(float3(0.0f, y1, z1));
+        s_ArrowNorm[ARROW_CYL].push_back(float3(0.0f, y0, z0));
+        s_ArrowNorm[ARROW_CYL].push_back(float3(0.0f, y1, z1));
+        s_ArrowNorm[ARROW_CYL].push_back(float3(0.0f, y1, z1));
+        s_ArrowTri[ARROW_CYL_CAP].push_back(float3(x0, 0.0f, 0.0f));
         s_ArrowTri[ARROW_CYL_CAP].push_back(float3(x0, CYL_RADIUS*y1, CYL_RADIUS*z1));
         s_ArrowTri[ARROW_CYL_CAP].push_back(float3(x0, CYL_RADIUS*y0, CYL_RADIUS*z0));
         s_ArrowNorm[ARROW_CYL_CAP].push_back(float3(-1, 0, 0));
@@ -398,19 +398,19 @@ void ArrowWidget::createArrow() {
         x1 = ARROW_END;
         nx = CONE_RADIUS / (x1 - x0);
         nn = 1.0f / sqrtf(nx*nx + 1);
-        s_ArrowTri[ARROW_CONE].push_back(float3(x1, 0, 0));
+        s_ArrowTri[ARROW_CONE].push_back(float3(x1, 0.0f, 0.0f));
         s_ArrowTri[ARROW_CONE].push_back(float3(x0, CONE_RADIUS*y0, CONE_RADIUS*z0));
         s_ArrowTri[ARROW_CONE].push_back(float3(x0, CONE_RADIUS*y1, CONE_RADIUS*z1));
-        s_ArrowTri[ARROW_CONE].push_back(float3(x1, 0, 0));
+        s_ArrowTri[ARROW_CONE].push_back(float3(x1, 0.0f, 0.0f));
         s_ArrowTri[ARROW_CONE].push_back(float3(x0, CONE_RADIUS*y1, CONE_RADIUS*z1));
-        s_ArrowTri[ARROW_CONE].push_back(float3(x1, 0, 0));
+        s_ArrowTri[ARROW_CONE].push_back(float3(x1, 0.0f, 0.0f));
         s_ArrowNorm[ARROW_CONE].push_back(float3(nn*nx, nn*y0, nn*z0));
         s_ArrowNorm[ARROW_CONE].push_back(float3(nn*nx, nn*y0, nn*z0));
         s_ArrowNorm[ARROW_CONE].push_back(float3(nn*nx, nn*y1, nn*z1));
         s_ArrowNorm[ARROW_CONE].push_back(float3(nn*nx, nn*y0, nn*z0));
         s_ArrowNorm[ARROW_CONE].push_back(float3(nn*nx, nn*y1, nn*z1));
         s_ArrowNorm[ARROW_CONE].push_back(float3(nn*nx, nn*y1, nn*z1));
-        s_ArrowTri[ARROW_CONE_CAP].push_back(float3(x0, 0, 0));
+        s_ArrowTri[ARROW_CONE_CAP].push_back(float3(x0, 0.0f, 0.0f));
         s_ArrowTri[ARROW_CONE_CAP].push_back(float3(x0, CONE_RADIUS*y1, CONE_RADIUS*z1));
         s_ArrowTri[ARROW_CONE_CAP].push_back(float3(x0, CONE_RADIUS*y0, CONE_RADIUS*z0));
         s_ArrowNorm[ARROW_CONE_CAP].push_back(float3(-1, 0, 0));
@@ -444,7 +444,7 @@ void ArrowWidget::quatFromDirection(quatf& out, const float3& dir) {
         out.x = out.y = out.z = 0;
         out.w = 1;
     } else {
-        float3 rotAxis = { 0, -dir.z, dir.y };
+        float3 rotAxis = { 0.0f, -dir.z, dir.y };
         if (dot(rotAxis, rotAxis) < FLT_EPSILON * FLT_EPSILON) {
             rotAxis.x = rotAxis.y = 0; rotAxis.z = 1;
         }

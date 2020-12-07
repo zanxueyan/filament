@@ -258,7 +258,7 @@ static void setup(Engine* engine, View*, Scene* scene) {
 
     // Parent the spot light to the root renderable in the mesh.
     tcm.create(g_params.spotLight, tcm.getInstance(g_meshSet->getRenderables()[0]));
-    g_params.spotLightPosition = float3{0.0, 1.0, 0.0f};
+    g_params.spotLightPosition = float3{0.0f, 1.0f, 0.0f};
 
     if (g_shadowPlane) {
         EntityManager& em = EntityManager::get();
@@ -312,7 +312,7 @@ static void setup(Engine* engine, View*, Scene* scene) {
         Entity planeRenderable = em.create();
         RenderableManager::Builder(1)
                 .boundingBox({{ 0, 0, 0 },
-                              { 10, 1e-4f, 10 }})
+                              { 10.0f, 1e-4f, 10.0f }})
                 .material(0, shadowMaterial->getDefaultInstance())
                 .geometry(0, RenderableManager::PrimitiveType::TRIANGLES,
                         vertexBuffer, indexBuffer, 0, 6)

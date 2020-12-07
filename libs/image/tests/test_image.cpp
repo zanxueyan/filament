@@ -541,7 +541,7 @@ static LinearImage createNormalMap(uint32_t size) {
     for (uint32_t n = 0; n < size * size; ++n) {
         const uint32_t row = n / size, col = n % size;
         const Ray ray {
-            .orig = { (col + 0.5f) * invsize, 1.0f - (row + 0.5f) * invsize, 1 },
+            .orig = { (col + 0.5f) * invsize, 1.0f - (row + 0.5f) * invsize, 1.0f },
             .dir = {0, 0, -1}
         };
         float t;
@@ -567,7 +567,7 @@ static LinearImage createDepthMap(uint32_t size) {
     for (uint32_t n = 0; n < size * size; ++n) {
         const uint32_t row = n / size, col = n % size;
         const Ray ray {
-            .orig = { (col + 0.5f) * invsize, 1.0f - (row + 0.5f) * invsize, 1 },
+            .orig = { (col + 0.5f) * invsize, 1.0f - (row + 0.5f) * invsize, 1.0f },
             .dir = {0, 0, -1}
         };
         float t;

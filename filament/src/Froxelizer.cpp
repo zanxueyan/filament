@@ -336,14 +336,14 @@ bool Froxelizer::update() noexcept {
         // generate the horizontal planes from their clip-space equation
         for (size_t i = 0, n = mFroxelCountX; i <= n; ++i) {
             float x = (i * froxelWidthInClipSpace) - 1.0f;
-            float4 p = trProjection * float4{ -1, 0, 0, x };
+            float4 p = trProjection * float4{ -1.0f, 0.0f, 0.0f, x };
             planesX[i] = float4{ normalize(p.xyz), 0 };
         }
 
         // generate the vertical planes from their clip-space equation
         for (size_t i = 0, n = mFroxelCountY; i <= n; ++i) {
             float y = (i * froxelHeightInClipSpace) - 1.0f;
-            float4 p = trProjection * float4{ 0, 1, 0, -y };
+            float4 p = trProjection * float4{ 0.0f, 1.0f, 0.0f, -y };
             planesY[i] = float4{ normalize(p.xyz), 0 };
         }
 
@@ -378,8 +378,8 @@ bool Froxelizer::update() noexcept {
             float3 maxp;
 
             // near/far planes for all froxels at iz
-            planes[4] =  float4{ 0, 0, 1, planesZ[iz + 0] };
-            planes[5] = -float4{ 0, 0, 1, planesZ[iz + 1] };
+            planes[4] =  float4{ 0.0f, 0.0f, 1.0f, planesZ[iz + 0] };
+            planes[5] = -float4{ 0.0f, 0.0f, 1.0f, planesZ[iz + 1] };
 
             // min/max for z is calculated trivially because near/far planes are parallel to
             // the camera.
@@ -473,10 +473,10 @@ Froxel Froxelizer::getFroxelAt(size_t x, size_t y, size_t z) const noexcept {
     Froxel froxel;
     froxel.planes[Froxel::LEFT]   =  mPlanesX[x];
     froxel.planes[Froxel::BOTTOM] =  mPlanesY[y];
-    froxel.planes[Froxel::NEAR]   =  float4{ 0, 0, 1, mDistancesZ[z] };
+    froxel.planes[Froxel::NEAR]   =  float4{ 0.0f, 0.0f, 1.0f, mDistancesZ[z] };
     froxel.planes[Froxel::RIGHT]  = -mPlanesX[x + 1];
     froxel.planes[Froxel::TOP]    = -mPlanesY[y + 1];
-    froxel.planes[Froxel::FAR]    = -float4{ 0, 0, 1, mDistancesZ[z+1] };
+    froxel.planes[Froxel::FAR]    = -float4{ 0.0f, 0.0f, 1.0f, mDistancesZ[z+1] };
     return froxel;
 }
 

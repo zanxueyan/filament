@@ -628,7 +628,7 @@ void CubemapIBL::diffuseIrradiance(JobSystem& js, Cubemap& dst, const std::vecto
 static float2 UTILS_UNUSED DFV_NoIS(float NoV, float roughness, size_t numSamples) {
     float2 r = 0;
     const float linearRoughness = roughness * roughness;
-    const float3 V(std::sqrt(1 - NoV * NoV), 0, NoV);
+    const float3 V(std::sqrt(1 - NoV * NoV), 0.0f, NoV);
     for (size_t i = 0; i < numSamples; i++) {
         const float2 u = hammersley(uint32_t(i), 1.0f / numSamples);
         const float3 H = hemisphereCosSample(u);
@@ -738,7 +738,7 @@ static float2 UTILS_UNUSED DFV_NoIS(float NoV, float roughness, size_t numSample
 
 static float2 DFV(float NoV, float linearRoughness, size_t numSamples) {
     float2 r = 0;
-    const float3 V(std::sqrt(1 - NoV * NoV), 0, NoV);
+    const float3 V(std::sqrt(1 - NoV * NoV), 0.0f, NoV);
     for (size_t i = 0; i < numSamples; i++) {
         const float2 u = hammersley(uint32_t(i), 1.0f / numSamples);
         const float3 H = hemisphereImportanceSampleDggx(u, linearRoughness);
@@ -780,7 +780,7 @@ static float2 DFV(float NoV, float linearRoughness, size_t numSamples) {
 
 static float2 DFV_Multiscatter(float NoV, float linearRoughness, size_t numSamples) {
     float2 r = 0;
-    const float3 V(std::sqrt(1 - NoV * NoV), 0, NoV);
+    const float3 V(std::sqrt(1 - NoV * NoV), 0.0f, NoV);
     for (size_t i = 0; i < numSamples; i++) {
         const float2 u = hammersley(uint32_t(i), 1.0f / numSamples);
         const float3 H = hemisphereImportanceSampleDggx(u, linearRoughness);
@@ -827,7 +827,7 @@ static float UTILS_UNUSED DFV_LazanyiTerm(float NoV, float linearRoughness, size
     float r = 0;
     const float cosThetaMax = (float) std::cos(81.7 * F_PI / 180.0);
     const float q = 1.0f / (cosThetaMax * pow6(1.0f - cosThetaMax));
-    const float3 V(std::sqrt(1 - NoV * NoV), 0, NoV);
+    const float3 V(std::sqrt(1 - NoV * NoV), 0.0f, NoV);
     for (size_t i = 0; i < numSamples; i++) {
         const float2 u = hammersley(uint32_t(i), 1.0f / numSamples);
         const float3 H = hemisphereImportanceSampleDggx(u, linearRoughness);
@@ -846,7 +846,7 @@ static float UTILS_UNUSED DFV_LazanyiTerm(float NoV, float linearRoughness, size
 
 static float DFV_Charlie_Uniform(float NoV, float linearRoughness, size_t numSamples) {
     float r = 0.0;
-    const float3 V(std::sqrt(1 - NoV * NoV), 0, NoV);
+    const float3 V(std::sqrt(1 - NoV * NoV), 0.0f, NoV);
     for (size_t i = 0; i < numSamples; i++) {
         const float2 u = hammersley(uint32_t(i), 1.0f / numSamples);
         const float3 H = hemisphereUniformSample(u);
@@ -951,7 +951,7 @@ static float DFV_Charlie_Uniform(float NoV, float linearRoughness, size_t numSam
  */
 static float UTILS_UNUSED DFV_Charlie_IS(float NoV, float linearRoughness, size_t numSamples) {
     float r = 0.0;
-    const float3 V(std::sqrt(1 - NoV * NoV), 0, NoV);
+    const float3 V(std::sqrt(1 - NoV * NoV), 0.0f, NoV);
     for (size_t i = 0; i < numSamples; i++) {
         const float2 u = hammersley(uint32_t(i), 1.0f / numSamples);
         const float3 H = hemisphereImportanceSampleDCharlie(u, linearRoughness);
@@ -1016,7 +1016,7 @@ void CubemapIBL::DFG(JobSystem& js, Image& dst, bool multiscatter, bool cloth) {
                     for (size_t x = 0; x < height; x++, data++) {
                         // const float NoV = float(x) / (width-1);
                         const float NoV = saturate((x + 0.5f) / width);
-                        float3 r = { dfvFunction(NoV, linear_roughness, 1024), 0 };
+                        float3 r = { dfvFunction(NoV, linear_roughness, 1024), 0.0f };
                         if (cloth) {
                             r.b = float(DFV_Charlie_Uniform(NoV, linear_roughness, 4096));
                         }

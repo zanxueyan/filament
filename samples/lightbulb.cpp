@@ -222,7 +222,7 @@ static void setup(Engine* engine, View* view, Scene* scene) {
     LightManager::Builder(LightManager::Type::SUN)
             .color(Color::toLinear<ACCURATE>(sRGBColor(0.98f, 0.92f, 0.89f)))
             .intensity(110000)
-            .direction({ 0.7, -1, -0.8 })
+            .direction({ 0.7, -1.0, -0.8 })
             .sunAngularRadius(1.9f)
             .castShadows(true)
             .build(*engine, g_lights.back());
@@ -412,7 +412,7 @@ static void setup(Engine* engine, View* view, Scene* scene) {
         Entity planeRenderable = em.create();
         RenderableManager::Builder(1)
                 .boundingBox({{ 0, 0, 0 },
-                              { 10, 1e-4f, 10 }})
+                              { 10.0f, 1e-4f, 10.0f }})
                 .material(0, shadowMaterial->getDefaultInstance())
                 .geometry(0, RenderableManager::PrimitiveType::TRIANGLES,
                         vertexBuffer, indexBuffer, 0, 6)

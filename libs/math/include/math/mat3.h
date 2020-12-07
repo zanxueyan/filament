@@ -334,18 +334,18 @@ template<typename T>
 template<typename U>
 constexpr TMat33<T>::TMat33(U v) noexcept
         : m_value{
-        col_type(v, 0, 0),
-        col_type(0, v, 0),
-        col_type(0, 0, v) } {
+        col_type(v,    U(0), U(0)),
+        col_type(U(0), v,    U(0)),
+        col_type(U(0), U(0), v) } {
 }
 
 template<typename T>
 template<typename U>
 constexpr TMat33<T>::TMat33(const TVec3<U>& v) noexcept
         : m_value{
-        col_type(v[0], 0, 0),
-        col_type(0, v[1], 0),
-        col_type(0, 0, v[2]) } {
+        col_type(v[0], U(0), U(0)),
+        col_type(U(0), v[1], U(0)),
+        col_type(U(0), U(0), v[2]) } {
 }
 
 // construct from 16 scalars. Note that the arrangement

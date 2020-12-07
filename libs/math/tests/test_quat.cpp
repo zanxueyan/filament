@@ -71,7 +71,7 @@ TEST_F(QuatTest, Constructors) {
     EXPECT_EQ(q4.z, 4);
     EXPECT_EQ(q4.w, 42);
 
-    quat q5(double3(q2.xy, 42), 24);
+    quat q5(double3(q2.xy, 42.0), 24.0);
     EXPECT_EQ(q5.x, 2);
     EXPECT_EQ(q5.y, 3);
     EXPECT_EQ(q5.z, 42);

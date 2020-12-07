@@ -238,7 +238,7 @@ static void setup(Engine* engine, View* view, Scene* scene) {
     LightManager::Builder(LightManager::Type::DIRECTIONAL)
             .color(Color::toLinear<ACCURATE>({0.98f, 0.92f, 0.89f}))
             .intensity(110000)
-            .direction({0.6, -1, -0.8})
+            .direction({0.6, -1.0, -0.8})
             .build(*engine, g_light);
     scene->addEntity(g_light);
 }

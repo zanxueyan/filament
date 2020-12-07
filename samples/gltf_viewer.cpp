@@ -275,10 +275,10 @@ static void createGroundPlane(Engine* engine, Scene* scene, App& app) {
     float3 planeExtent{10.0f * aabb.extent().x, 0.0f, 10.0f * aabb.extent().z};
 
     const static float3 vertices[] = {
-            { -planeExtent.x, 0, -planeExtent.z },
-            { -planeExtent.x, 0,  planeExtent.z },
-            {  planeExtent.x, 0,  planeExtent.z },
-            {  planeExtent.x, 0, -planeExtent.z },
+            { -planeExtent.x, 0.0f, -planeExtent.z },
+            { -planeExtent.x, 0.0f,  planeExtent.z },
+            {  planeExtent.x, 0.0f,  planeExtent.z },
+            {  planeExtent.x, 0.0f, -planeExtent.z },
     };
 
     short4 tbn = packSnorm16(
@@ -317,7 +317,7 @@ static void createGroundPlane(Engine* engine, Scene* scene, App& app) {
     Entity groundPlane = em.create();
     RenderableManager::Builder(1)
             .boundingBox({
-                { -planeExtent.x, 0, -planeExtent.z },
+                { -planeExtent.x, 0.0f, -planeExtent.z },
                 { planeExtent.x, 1e-4f, planeExtent.z }
             })
             .material(0, shadowMaterial->getDefaultInstance())
@@ -332,7 +332,7 @@ static void createGroundPlane(Engine* engine, Scene* scene, App& app) {
 
     auto& tcm = engine->getTransformManager();
     tcm.setTransform(tcm.getInstance(groundPlane),
-            mat4f::translation(float3{ 0, aabb.min.y, -4 }));
+            mat4f::translation(float3{ 0.0f, aabb.min.y, -4.0f }));
 
     auto& rcm = engine->getRenderableManager();
     auto instance = rcm.getInstance(groundPlane);

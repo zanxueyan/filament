@@ -160,7 +160,7 @@ template <>
 uint8_t packFloat(float f) { return packUnorm8(f); }
 
 template <>
-filament::math::byte3 packFloat(float f) { return filament::math::byte3 {packUnorm8(f), 0, 0}; }
+filament::math::byte3 packFloat(float f) { return filament::math::byte3 {packUnorm8(f), uint8_t(0), uint8_t(0)}; }
 
 template<typename T>
 void populateTextureWithPerlin(Texture* texture, Engine& engine, float time, Params& params,

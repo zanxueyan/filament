@@ -121,7 +121,7 @@ TEST_F(VecTest, Constructors) {
     EXPECT_EQ(v4.z, 3);
     EXPECT_EQ(v4.w, 42);
 
-    double4 v5(double3(v2.xy, 42), 24);
+    double4 v5(double3(v2.xy, 42.0), 24.0);
     EXPECT_EQ(v5.x, 1);
     EXPECT_EQ(v5.y, 2);
     EXPECT_EQ(v5.z, 42);

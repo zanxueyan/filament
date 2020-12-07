@@ -143,7 +143,7 @@ void FScene::prepare(const mat4f& worldOriginTransform) {
                     // using mat3f::getTransformForNormals handles non-uniform scaling
                     d = normalize(mat3f::getTransformForNormals(worldTransform.upperLeft()) * d);
                     lightData.elementAt<FScene::POSITION_RADIUS>(0) =
-                            float4{ 0, 0, 0, std::numeric_limits<float>::infinity() };
+                            float4{ 0.0f, 0.0f, 0.0f, std::numeric_limits<float>::infinity() };
                     lightData.elementAt<FScene::DIRECTION>(0)       = d;
                     lightData.elementAt<FScene::LIGHT_INSTANCE>(0)  = li;
                 }
@@ -344,8 +344,8 @@ inline void FScene::computeLightRanges(
         // this loop gets vectorized x4
         const float4 sphere = spheres[i];
         const float4 center = camera.view * sphere.xyz; // camera points towards the -z axis
-        float4 n = center + float4{ 0, 0, sphere.w, 0 };
-        float4 f = center - float4{ 0, 0, sphere.w, 0 };
+        float4 n = center + float4{ 0.0f, 0.0f, sphere.w, 0.0f };
+        float4 f = center - float4{ 0.0f, 0.0f, sphere.w, 0.0f };
         // project to clip space
         n = camera.projection * n;
         f = camera.projection * f;

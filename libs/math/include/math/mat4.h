@@ -323,18 +323,18 @@ public:
     template<typename A>
     static constexpr TMat44 translation(const TVec3<A>& t) noexcept {
         TMat44 r;
-        r[3] = TVec4<T>{ t, 1 };
+        r[3] = TVec4<T>{ t, A(1) };
         return r;
     }
 
     template<typename A>
     static constexpr TMat44 scaling(const TVec3<A>& s) noexcept {
-        return TMat44{ TVec4<T>{ s, 1 }};
+        return TMat44{ TVec4<T>{ s, A(1) }};
     }
 
     template<typename A>
     static constexpr TMat44 scaling(A s) noexcept {
-        return TMat44{ TVec4<T>{ s, s, s, 1 }};
+        return TMat44{ TVec4<T>{ s, s, s, A(1) }};
     }
 };
 
@@ -358,20 +358,20 @@ template<typename T>
 template<typename U>
 constexpr TMat44<T>::TMat44(U v) noexcept
         : m_value{
-        col_type(v, 0, 0, 0),
-        col_type(0, v, 0, 0),
-        col_type(0, 0, v, 0),
-        col_type(0, 0, 0, v) } {
+        col_type(v, U(0), U(0), U(0)),
+        col_type(U(0), v, U(0), U(0)),
+        col_type(U(0), U(0), v, U(0)),
+        col_type(U(0), U(0), U(0), v) } {
 }
 
 template<typename T>
 template<typename U>
 constexpr TMat44<T>::TMat44(const TVec4<U>& v) noexcept
         : m_value{
-        col_type(v[0], 0, 0, 0),
-        col_type(0, v[1], 0, 0),
-        col_type(0, 0, v[2], 0),
-        col_type(0, 0, 0, v[3]) } {
+        col_type(v[0], U(0), U(0), U(0)),
+        col_type(U(0), v[1], U(0), U(0)),
+        col_type(U(0), U(0), v[2], U(0)),
+        col_type(U(0), U(0), U(0), v[3]) } {
 }
 
 
@@ -424,9 +424,9 @@ constexpr TMat44<T>::TMat44(const TQuaternion<U>& q) noexcept : m_value{} {
     const U yw = y * q.w;
     const U zz = z * q.z;
     const U zw = z * q.w;
-    m_value[0] = col_type(1 - yy - zz, xy + zw, xz - yw, 0);
-    m_value[1] = col_type(xy - zw, 1 - xx - zz, yz + xw, 0);  // NOLINT
-    m_value[2] = col_type(xz + yw, yz - xw, 1 - xx - yy, 0);  // NOLINT
+    m_value[0] = col_type(1 - yy - zz, xy + zw, xz - yw, U(0));
+    m_value[1] = col_type(xy - zw, 1 - xx - zz, yz + xw, U(0));  // NOLINT
+    m_value[2] = col_type(xz + yw, yz - xw, 1 - xx - yy, U(0));  // NOLINT
     m_value[3] = col_type(0, 0, 0, 1);  // NOLINT
 }
 
@@ -434,9 +434,9 @@ template<typename T>
 template<typename U>
 constexpr TMat44<T>::TMat44(const TMat33<U>& m) noexcept
         : m_value{
-        col_type(m[0][0], m[0][1], m[0][2], 0),
-        col_type(m[1][0], m[1][1], m[1][2], 0),
-        col_type(m[2][0], m[2][1], m[2][2], 0),
+        col_type(m[0][0], m[0][1], m[0][2], U(0)),
+        col_type(m[1][0], m[1][1], m[1][2], U(0)),
+        col_type(m[2][0], m[2][1], m[2][2], U(0)),
         col_type(0, 0, 0, 1) }  // NOLINT
 {
 }
@@ -445,10 +445,10 @@ template<typename T>
 template<typename U, typename V>
 constexpr TMat44<T>::TMat44(const TMat33<U>& m, const TVec3<V>& v) noexcept
         : m_value{
-        col_type(m[0][0], m[0][1], m[0][2], 0),
-        col_type(m[1][0], m[1][1], m[1][2], 0),
-        col_type(m[2][0], m[2][1], m[2][2], 0),
-        col_type(v[0], v[1], v[2], 1) }  // NOLINT
+        col_type(m[0][0], m[0][1], m[0][2], U(0)),
+        col_type(m[1][0], m[1][1], m[1][2], U(0)),
+        col_type(m[2][0], m[2][1], m[2][2], U(0)),
+        col_type(v[0], v[1], v[2], V(1)) }  // NOLINT
 {
 }
 
@@ -456,9 +456,9 @@ template<typename T>
 template<typename U, typename V>
 constexpr TMat44<T>::TMat44(const TMat33<U>& m, const TVec4<V>& v) noexcept
         : m_value{
-        col_type(m[0][0], m[0][1], m[0][2], 0),
-        col_type(m[1][0], m[1][1], m[1][2], 0),
-        col_type(m[2][0], m[2][1], m[2][2], 0),
+        col_type(m[0][0], m[0][1], m[0][2], U(0)),
+        col_type(m[1][0], m[1][1], m[1][2], U(0)),
+        col_type(m[2][0], m[2][1], m[2][2], U(0)),
         col_type(v[0], v[1], v[2], v[3]) }  // NOLINT
 {
 }

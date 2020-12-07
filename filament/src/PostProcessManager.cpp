@@ -497,7 +497,7 @@ FrameGraphId<FrameGraphTexture> PostProcessManager::screenSpaceAmbientOcclusion(
                 mi->setParameter("screenFromViewMatrix",
                         mat4f(screenFromClipMatrix * cameraInfo.projection));
                 mi->setParameter("resolution",
-                        float4{ desc.width, desc.height, 1.0f / desc.width, 1.0f / desc.height });
+                        float4{ float(desc.width), float(desc.height), 1.0f / desc.width, 1.0f / desc.height });
                 mi->setParameter("invRadiusSquared",
                         1.0f / (options.radius * options.radius));
                 mi->setParameter("minHorizonAngleSineSquared",
@@ -770,7 +770,7 @@ FrameGraphId<FrameGraphTexture> PostProcessManager::gaussianBlurPass(FrameGraph&
                 mi->setParameter("level", (float)srcLevel);
                 mi->setParameter("reinhard", reinhard ? uint32_t(1) : uint32_t(0));
                 mi->setParameter("resolution", float4{
-                        tempDesc.width, tempDesc.height,
+                        float(tempDesc.width), float(tempDesc.height),
                         1.0f / tempDesc.width, 1.0f / tempDesc.height });
                 mi->setParameter("axis",
                         float2{ 1.0f / FTexture::valueForLevel(srcLevel, inDesc.width), 0 });
@@ -794,7 +794,7 @@ FrameGraphId<FrameGraphTexture> PostProcessManager::gaussianBlurPass(FrameGraph&
                 });
                 mi->setParameter("level", 0.0f);
                 mi->setParameter("resolution",
-                        float4{ width, height, 1.0f / width, 1.0f / height });
+                        float4{ float(width), float(height), 1.0f / width, 1.0f / height });
                 mi->setParameter("axis", float2{ 0, 1.0f / tempDesc.height });
                 mi->commit(driver);
                 // we don't need to call use() here, since it's the same material
@@ -912,7 +912,7 @@ FrameGraphId<FrameGraphTexture> PostProcessManager::dof(FrameGraph& fg,
                 mi->setParameter("color", color, { .filterMin = SamplerMinFilter::NEAREST });
                 mi->setParameter("depth", depth, { .filterMin = SamplerMinFilter::NEAREST });
                 mi->setParameter("cocParams", cocParams);
-                mi->setParameter("uvscale", float4{ width, height, 1.0f / colorDesc.width, 1.0f / colorDesc.height });
+                mi->setParameter("uvscale", float4{ float(width), float(height), 1.0f / colorDesc.width, 1.0f / colorDesc.height });
                 commitAndRender(out, material, driver);
             });
 
@@ -1030,7 +1030,7 @@ FrameGraphId<FrameGraphTexture> PostProcessManager::dof(FrameGraph& fg,
                     FMaterialInstance* const mi = material.getMaterialInstance();
                     mi->setParameter("cocMaxMin", inCocMaxMin, { .filterMin = SamplerMinFilter::NEAREST });
                     mi->setParameter("uvscale", float4{
-                        outputDesc.width, outputDesc.height,
+                        (float) outputDesc.width, (float) outputDesc.height,
                         1.0f / inputDesc.width, 1.0f / inputDesc.height });
                     commitAndRender(out, material, driver);
                 });
@@ -1357,7 +1357,7 @@ FrameGraphId<FrameGraphTexture> PostProcessManager::bloomPass(FrameGraph& fg,
 
                     auto w = FTexture::valueForLevel(i, outDesc.width);
                     auto h = FTexture::valueForLevel(i, outDesc.height);
-                    mi->setParameter("resolution", float4{ w, h, 1.0f / w, 1.0f / h });
+                    mi->setParameter("resolution", float4{ float(w), float(h), 1.0f / w, 1.0f / h });
                     mi->commit(driver);
 
                     hwOutRT.params.flags.discardStart = TargetBufferFlags::COLOR;
@@ -1409,7 +1409,7 @@ FrameGraphId<FrameGraphTexture> PostProcessManager::bloomPass(FrameGraph& fg,
 
                     auto w = FTexture::valueForLevel(i - 1, outDesc.width);
                     auto h = FTexture::valueForLevel(i - 1, outDesc.height);
-                    mi->setParameter("resolution", float4{ w, h, 1.0f / w, 1.0f / h });
+                    mi->setParameter("resolution", float4{ float(w), float(h), 1.0f / w, 1.0f / h });
                     mi->setParameter("source", hwIn, {
                             .filterMag = SamplerMagFilter::LINEAR,
                             .filterMin = SamplerMinFilter::LINEAR_MIPMAP_NEAREST
@@ -1877,7 +1877,7 @@ FrameGraphId<FrameGraphTexture> PostProcessManager::blendBlit(
                         .filterMin = SamplerMinFilter::LINEAR
                 });
                 mi->setParameter("resolution",
-                        float4{ desc.width, desc.height, 1.0f / desc.width, 1.0f / desc.height });
+                        float4{ float(desc.width), float(desc.height), 1.0f / desc.width, 1.0f / desc.height });
                 mi->commit(driver);
                 mi->use(driver);
 

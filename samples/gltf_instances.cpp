@@ -224,7 +224,7 @@ int main(int argc, char** argv) {
         auto& tcm = app.engine->getTransformManager();
         auto extent = app.asset->getBoundingBox().extent();
         float max_extent = std::max(std::max(extent.x,  extent.y), extent.z);
-        auto translation = mat4f::translation(float3(max_extent, 0, 0));
+        auto translation = mat4f::translation(float3(max_extent, 0.0f, 0.0f));
         for (size_t inst = 0; inst < app.instances.size(); ++inst) {
             FilamentInstance* instance = app.instances[inst];
             auto transformRoot = tcm.getInstance(instance->getRoot());

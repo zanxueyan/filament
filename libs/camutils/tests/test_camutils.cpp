@@ -58,9 +58,9 @@ TEST_F(CamUtilsTest, Orbit) {
     orbit->grabEnd();
 
     orbit->getLookAt(&eye, &targetPosition, &up);
-    EXPECT_VEC_EQ(eye, 2.0254626, 0, 3.4492755);
-    EXPECT_VEC_EQ(targetPosition, 1.519097, 0, 2.5869565);
-    EXPECT_VEC_EQ(up, 0, 1, 0);
+    EXPECT_VEC_EQ(eye, 2.0254626f, 0.0f, 3.4492755f);
+    EXPECT_VEC_EQ(targetPosition, 1.519097f, 0.0f, 2.5869565f);
+    EXPECT_VEC_EQ(up, 0.0f, 1.0f, 0.0f);
 
     delete orbit;
 }

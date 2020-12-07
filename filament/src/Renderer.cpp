@@ -903,7 +903,7 @@ bool FRenderer::beginFrame(FSwapChain* swapChain, uint64_t vsyncSteadyClockTimeN
     std::chrono::duration<double> time(appVsync - mUserEpoch);
     float h = float(time.count());
     float l = float(time.count() - h);
-    mShaderUserTime = { h, l, 0, 0 };
+    mShaderUserTime = { h, l, 0.0f, 0.0f };
 
     initializeClearFlags();
     mPreviousRenderTargets.clear();

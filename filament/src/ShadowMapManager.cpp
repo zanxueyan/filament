@@ -315,7 +315,7 @@ ShadowMapManager::ShadowTechnique ShadowMapManager::updateCascadeShadowMaps(
         const float texelSizeWorldSpace = map.getTexelSizeWorldSpace();
         const float normalBias = lcm.getShadowNormalBias(0);
         perViewUb.setUniform(offsetof(PerViewUib, shadowBias),
-                float3{0, normalBias * texelSizeWorldSpace, 0});
+                float3{0.0f, normalBias * texelSizeWorldSpace, 0.0f});
 
         // Set the directional light position. Only used when VSM is active.
         perViewUb.setUniform(offsetof(PerViewUib, lightPosition), cascadeParams.wsLightPosition);

@@ -87,13 +87,11 @@ public:
     template<typename A, typename = enable_if_arithmetic_t<A>>
     constexpr TVec4(A v) noexcept : v{ T(v), T(v), T(v), T(v) } {}
 
-    template<typename A, typename B, typename C, typename D,
-            typename = enable_if_arithmetic_t<A, B, C, D>>
-    constexpr TVec4(A x, B y, C z, D w) noexcept : v{ T(x), T(y), T(z), T(w) } {}
+    template<typename A, typename = enable_if_arithmetic_t<A>>
+    constexpr TVec4(A x, A y, A z, A w) noexcept : v{ T(x), T(y), T(z), T(w) } {}
 
-    template<typename A, typename B, typename C,
-            typename = enable_if_arithmetic_t<A, B, C>>
-    constexpr TVec4(const TVec2<A>& v, B z, C w) noexcept : v{ T(v[0]), T(v[1]), T(z), T(w) } {}
+    template<typename A,  typename = enable_if_arithmetic_t<A>>
+    constexpr TVec4(const TVec2<A>& v, A z, A w) noexcept : v{ T(v[0]), T(v[1]), T(z), T(w) } {}
 
     template<typename A, typename B, typename = enable_if_arithmetic_t<A, B>>
     constexpr TVec4(const TVec2<A>& v, const TVec2<B>& w) noexcept : v{

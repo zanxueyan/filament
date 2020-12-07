@@ -331,7 +331,7 @@ void ShadowMap::computeShadowCameraDirectional(
             // meaningless. Just use identity.
             // (LdotV == (Mv*V).z, because L = {0,0,1} in light-space)
             if (UTILS_LIKELY(std::abs(lsCameraFwd.z) < 0.9997f)) { // this is |dot(L, V)|
-                const float3 vp{ normalize(lsCameraFwd.xy), 0 }; // wrap direction in light-space
+                const float3 vp{ normalize(lsCameraFwd.xy), 0.0f }; // wrap direction in light-space
                 L[0].xyz = cross(vp, float3{ 0, 0, 1 });
                 L[1].xyz = vp;
                 L[2].xyz = { 0, 0, 1 };
@@ -564,7 +564,7 @@ mat4f ShadowMap::applyLISPSM(math::mat4f& Wp,
                 // e.g. (LMpMv * wsShadowReceiversVolume.center()).z
                 // However, simply using 0, guarantees to be centered on the light frustum, which itself
                 // is built from the shadow receiver and/or casters bounds.
-                0,
+                0.0f,
         };
 
         const mat4f Wv = mat4f::translation(-p);
@@ -770,14 +770,14 @@ void ShadowMap::computeFrustumCorners(float3* UTILS_RESTRICT out,
     float near = csNearFar.x;
     float far = csNearFar.y;
     float3 csViewFrustumCorners[8] = {
-            { -1, -1,  far },
-            {  1, -1,  far },
-            { -1,  1,  far },
-            {  1,  1,  far },
-            { -1, -1,  near },
-            {  1, -1,  near },
-            { -1,  1,  near },
-            {  1,  1,  near },
+            { -1.0f, -1.0f,  far },
+            {  1.0f, -1.0f,  far },
+            { -1.0f,  1.0f,  far },
+            {  1.0f,  1.0f,  far },
+            { -1.0f, -1.0f,  near },
+            {  1.0f, -1.0f,  near },
+            { -1.0f,  1.0f,  near },
+            {  1.0f,  1.0f,  near },
     };
     for (float3 c : csViewFrustumCorners) {
         *out++ = mat4f::project(projectionViewInverse, c);
