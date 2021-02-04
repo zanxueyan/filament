@@ -62,6 +62,7 @@ struct VulkanRenderTarget : private HwRenderTarget {
     bool invalidate();
     uint8_t getSamples() const { return mSamples; }
     bool hasDepth() const { return mDepth.format != VK_FORMAT_UNDEFINED; }
+
 private:
     VulkanAttachment mColor[MRT::TARGET_COUNT] = {};
     VulkanAttachment mDepth = {};
@@ -101,6 +102,7 @@ struct VulkanUniformBuffer : public HwUniformBuffer {
     ~VulkanUniformBuffer();
     void loadFromCpu(const void* cpuData, uint32_t numBytes);
     VkBuffer getGpuBuffer() const { return mGpuBuffer; }
+
 private:
     VulkanContext& mContext;
     VulkanStagePool& mStagePool;
@@ -125,8 +127,14 @@ struct VulkanTexture : public HwTexture {
     void updateCubeImage(const PixelBufferDescriptor& data, const FaceOffsets& faceOffsets,
             int miplevel);
 
-    // Gets or creates a cached image view for a single miplevel and array layer.
-    VkImageView getImageView(int level, int layer, VkImageAspectFlags aspect);
+    // Returns the primary image view, which can encompass a range of miplevels and layers.
+    VkImageView getPrimaryImageView() const { return mPrimaryImageView; }
+
+    // Gets or creates a sidecar image view for a single miplevel and array layer.
+    VkImageView getSidecarImageView(int level, int layer, VkImageAspectFlags aspect);
+
+    VkFormat getVkFormat() const { return mVkFormat; }
+    VkImage getVkImage() const { return mTextureImage; }
 
     // Issues a barrier that transforms the layout of the image, e.g. from a CPU-writeable
     // layout to a GPU-readable layout.
@@ -134,12 +142,7 @@ struct VulkanTexture : public HwTexture {
             VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t miplevel,
             uint32_t layers, uint32_t levels, VkImageAspectFlags aspect);
 
-    VkFormat vkformat;
-    VkImageView imageView = VK_NULL_HANDLE;
-    VkImage textureImage = VK_NULL_HANDLE;
-    VkDeviceMemory textureImageMemory = VK_NULL_HANDLE;
 private:
-
     // Issues a copy from a VkBuffer to a specified miplevel in a VkImage. The given width and
     // height define a subregion within the miplevel.
     void copyBufferToImage(VkCommandBuffer cmdbuffer, VkBuffer buffer, VkImage image,
@@ -152,7 +155,12 @@ private:
         VkImageView view;
     };
 
-    std::vector<ImageViewCacheEntry> mImageViews;
+    VkFormat mVkFormat;
+    VkImage mTextureImage = VK_NULL_HANDLE;
+    VkDeviceMemory mTextureImageMemory = VK_NULL_HANDLE;
+    VkImageView mPrimaryImageView = VK_NULL_HANDLE;
+    VkImageSubresourceRange mPrimaryRange;
+    std::vector<ImageViewCacheEntry> mSidecarImageViews;
     VkImageAspectFlags mAspect;
     VulkanContext& mContext;
     VulkanStagePool& mStagePool;
