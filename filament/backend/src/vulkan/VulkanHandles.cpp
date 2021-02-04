@@ -582,32 +582,30 @@ VulkanTexture::VulkanTexture(VulkanContext& context, SamplerType target, uint8_t
     mAspect = any(usage & TextureUsage::DEPTH_ATTACHMENT) ? VK_IMAGE_ASPECT_DEPTH_BIT :
             VK_IMAGE_ASPECT_COLOR_BIT;
 
-    mPrimaryRange.aspectMask = mAspect;
-    mPrimaryRange.baseMipLevel = 0;
-    mPrimaryRange.levelCount = levels;
-    mPrimaryRange.baseArrayLayer = 0;
-
     // Create a VkImageView so that shaders can sample from the image.
     // RenderTarget does not use this view because it selects a single miplevel.
-    VkImageViewCreateInfo viewInfo = {};
-    viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-    viewInfo.image = mTextureImage;
-    viewInfo.format = mVkFormat;
+    mPrimaryViewInfo = {};
+    mPrimaryViewInfo.subresourceRange.aspectMask = mAspect;
+    mPrimaryViewInfo.subresourceRange.baseMipLevel = 0;
+    mPrimaryViewInfo.subresourceRange.levelCount = levels;
+    mPrimaryViewInfo.subresourceRange.baseArrayLayer = 0;
+    mPrimaryViewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    mPrimaryViewInfo.image = mTextureImage;
+    mPrimaryViewInfo.format = mVkFormat;
     if (target == SamplerType::SAMPLER_CUBEMAP) {
-        viewInfo.viewType = VK_IMAGE_VIEW_TYPE_CUBE;
-        mPrimaryRange.layerCount = 6;
+        mPrimaryViewInfo.viewType = VK_IMAGE_VIEW_TYPE_CUBE;
+        mPrimaryViewInfo.subresourceRange.layerCount = 6;
     } else if (target == SamplerType::SAMPLER_2D_ARRAY) {
-        viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY;
-        mPrimaryRange.layerCount = depth;
+        mPrimaryViewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY;
+        mPrimaryViewInfo.subresourceRange.layerCount = depth;
     } else if (target == SamplerType::SAMPLER_3D) {
-        viewInfo.viewType = VK_IMAGE_VIEW_TYPE_3D;
-        mPrimaryRange.layerCount = 1;
+        mPrimaryViewInfo.viewType = VK_IMAGE_VIEW_TYPE_3D;
+        mPrimaryViewInfo.subresourceRange.layerCount = 1;
     } else {
-        viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        mPrimaryRange.layerCount = 1;
+        mPrimaryViewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        mPrimaryViewInfo.subresourceRange.layerCount = 1;
     }
-    viewInfo.subresourceRange = mPrimaryRange;
-    error = vkCreateImageView(context.device, &viewInfo, VKALLOC, &mPrimaryImageView);
+    error = vkCreateImageView(context.device, &mPrimaryViewInfo, VKALLOC, &mPrimaryView);
     ASSERT_POSTCONDITION(!error, "Unable to create image view.");
 
     if (any(usage & (TextureUsage::COLOR_ATTACHMENT | TextureUsage::DEPTH_ATTACHMENT))) {
@@ -630,7 +628,7 @@ VulkanTexture::VulkanTexture(VulkanContext& context, SamplerType target, uint8_t
 
 VulkanTexture::~VulkanTexture() {
     vkDestroyImage(mContext.device, mTextureImage, VKALLOC);
-    vkDestroyImageView(mContext.device, mPrimaryImageView, VKALLOC);
+    vkDestroyImageView(mContext.device, mPrimaryView, VKALLOC);
     vkFreeMemory(mContext.device, mTextureImageMemory, VKALLOC);
     for (auto entry : mSidecarImageViews) {
         vkDestroyImageView(mContext.device, entry.view, VKALLOC);
@@ -737,6 +735,20 @@ void VulkanTexture::updateCubeImage(const PixelBufferDescriptor& data,
         copyToDevice(mContext.work);
         flushWorkCommandBuffer(mContext);
     }
+}
+
+void VulkanTexture::setPrimaryRange(uint32_t minMiplevel, uint32_t maxMiplevel) {
+    const uint32_t count = maxMiplevel - minMiplevel + 1;
+    auto& currentRange = mPrimaryViewInfo.subresourceRange;
+    if (minMiplevel == currentRange.baseMipLevel && count == currentRange.levelCount) {
+        return;
+    }
+    printf("prideout image=%p base=%d, count=%d\n", this->mTextureImage, minMiplevel, count);
+    currentRange.baseMipLevel = minMiplevel;
+    currentRange.levelCount = count;
+    // TODO: schedule mPrimaryView for destruction
+    VkResult error = vkCreateImageView(mContext.device, &mPrimaryViewInfo, VKALLOC, &mPrimaryView);
+    ASSERT_POSTCONDITION(!error, "Unable to create image view.");
 }
 
 VkImageView VulkanTexture::getSidecarImageView(int level, int layer, VkImageAspectFlags aspect) {

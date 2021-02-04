@@ -851,6 +851,7 @@ void VulkanDriver::update2DImage(Handle<HwTexture> th,
 }
 
 void VulkanDriver::setMinMaxLevels(Handle<HwTexture> th, uint32_t minLevel, uint32_t maxLevel) {
+    handle_cast<VulkanTexture>(mHandleMap, th)->setPrimaryRange(minLevel, maxLevel);
 }
 
 void VulkanDriver::update3DImage(

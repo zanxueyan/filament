@@ -128,7 +128,10 @@ struct VulkanTexture : public HwTexture {
             int miplevel);
 
     // Returns the primary image view, which can encompass a range of miplevels and layers.
-    VkImageView getPrimaryImageView() const { return mPrimaryImageView; }
+    VkImageView getPrimaryImageView() const { return mPrimaryView; }
+
+    // Sets the min/max range of miplevels in the primary image view.
+    void setPrimaryRange(uint32_t minMiplevel, uint32_t maxMiplevel);
 
     // Gets or creates a sidecar image view for a single miplevel and array layer.
     VkImageView getSidecarImageView(int level, int layer, VkImageAspectFlags aspect);
@@ -158,8 +161,8 @@ private:
     VkFormat mVkFormat;
     VkImage mTextureImage = VK_NULL_HANDLE;
     VkDeviceMemory mTextureImageMemory = VK_NULL_HANDLE;
-    VkImageView mPrimaryImageView = VK_NULL_HANDLE;
-    VkImageSubresourceRange mPrimaryRange;
+    VkImageView mPrimaryView = VK_NULL_HANDLE;
+    VkImageViewCreateInfo mPrimaryViewInfo;
     std::vector<ImageViewCacheEntry> mSidecarImageViews;
     VkImageAspectFlags mAspect;
     VulkanContext& mContext;
