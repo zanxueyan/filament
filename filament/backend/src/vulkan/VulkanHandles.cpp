@@ -21,7 +21,7 @@
 
 #include <utils/Panic.h>
 
-#define FILAMENT_VULKAN_VERBOSE 0
+#define FILAMENT_VULKAN_VERBOSE 1
 
 using namespace bluevk;
 
@@ -743,7 +743,7 @@ void VulkanTexture::setPrimaryRange(uint32_t minMiplevel, uint32_t maxMiplevel) 
     if (minMiplevel == currentRange.baseMipLevel && count == currentRange.levelCount) {
         return;
     }
-    printf("prideout image=%p base=%d, count=%d\n", this->mTextureImage, minMiplevel, count);
+    // printf("prideout image=%p base=%d, count=%d\n", this->mTextureImage, minMiplevel, count);
     currentRange.baseMipLevel = minMiplevel;
     currentRange.levelCount = count;
     // TODO: schedule mPrimaryView for destruction
