@@ -50,7 +50,7 @@ VKAPI_ATTR VkBool32 VKAPI_CALL debugReportCallback(VkDebugReportFlagsEXT flags,
         int32_t messageCode, const char* pLayerPrefix, const char* pMessage, void* pUserData) {
     if (flags & VK_DEBUG_REPORT_ERROR_BIT_EXT) {
         utils::slog.e << "VULKAN ERROR: (" << pLayerPrefix << ") " << pMessage << utils::io::endl;
-        utils::debug_trap();
+        //utils::debug_trap();
     } else {
         utils::slog.w << "VULKAN WARNING: (" << pLayerPrefix << ") "
                 << pMessage << utils::io::endl;
@@ -72,7 +72,7 @@ VKAPI_ATTR VkBool32 VKAPI_CALL debugUtilsCallback(VkDebugUtilsMessageSeverityFla
     if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
         utils::slog.e << "VULKAN ERROR: (" << cbdata->pMessageIdName << ") "
                 << cbdata->pMessage << utils::io::endl;
-        utils::debug_trap();
+        //utils::debug_trap();
     } else {
         utils::slog.w << "VULKAN WARNING: (" << cbdata->pMessageIdName << ") "
                 << cbdata->pMessage << utils::io::endl;
