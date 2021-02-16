@@ -29,6 +29,10 @@ using namespace bluevk;
 namespace filament {
 namespace backend {
 
+VulkanBlitter::VulkanBlitter(VulkanContext& context, VulkanStagePool& stagePool, VulkanDisposer& disposer,
+            VulkanBinder& binder) : mRenderPrimitive(new VulkanRenderPrimitive(context)), mContext(context),
+            mStagePool(stagePool), mDisposer(disposer), mBinder(binder) {}
+
 void VulkanBlitter::blitColor(VkCommandBuffer cmdBuffer, BlitArgs args) {
     const VulkanAttachment src = args.srcTarget->getColor(args.targetIndex);
     const VulkanAttachment dst = args.dstTarget->getColor(0);
@@ -143,6 +147,9 @@ void VulkanBlitter::shutdown() noexcept {
 
         delete mTriangleVertices;
         mTriangleVertices = nullptr;
+
+        delete mRenderPrimitive;
+        mRenderPrimitive = nullptr;
     }
 }
 
@@ -179,13 +186,104 @@ void VulkanBlitter::lazyInit() noexcept {
             VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, sizeof(kTriangleVertices));
 
     mTriangleVertices->loadFromCpu(kTriangleVertices, 0, sizeof(kTriangleVertices));
+
+    mRenderPrimitive->primitiveTopology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
+    mRenderPrimitive->buffers.push_back(mTriangleVertices->getGpuBuffer());
+    mRenderPrimitive->offsets.push_back(0);
+
+    memset(&mRenderPrimitive->varray, 0, sizeof(mRenderPrimitive->varray));
+
+    mRenderPrimitive->varray.attributes[0] = {
+        .location = 0, // matches the GLSL layout specifier
+        .binding = 0,  // matches the position within vkCmdBindVertexBuffers
+        .format = VK_FORMAT_R32G32_SFLOAT,
+        .offset = 0
+    };
+    mRenderPrimitive->varray.buffers[0] = {
+        .binding = 0,
+        .stride = sizeof(float) * 2,
+        .inputRate = VK_VERTEX_INPUT_RATE_VERTEX
+    };
 }
 
 void VulkanBlitter::blitSlowDepth(VkImageAspectFlags aspect, VkFilter filter,
         const VkExtent2D srcExtent, VulkanAttachment src, VulkanAttachment dst,
-        const VkOffset3D srcRect[2], const VkOffset3D dstRect[2], VkCommandBuffer cmdBuffer) {
+        const VkOffset3D srcRect[2], const VkOffset3D dstRect[2], VkCommandBuffer cmdbuffer) {
     lazyInit();
-    // TODO
+
+    puts("drawing a quad...");
+
+    mContext.rasterState.depthStencil = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+        .depthTestEnable = VK_FALSE,
+        .depthWriteEnable = VK_TRUE,
+        .depthCompareOp = VK_COMPARE_OP_ALWAYS,
+        .depthBoundsTestEnable = VK_FALSE,
+        .stencilTestEnable = VK_FALSE,
+    };
+
+    mContext.rasterState.multisampling = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+        .rasterizationSamples = (VkSampleCountFlagBits) 1,
+        .alphaToCoverageEnable = VK_FALSE,
+    };
+
+    mContext.rasterState.blending = {
+        .blendEnable = VK_FALSE,
+        .srcColorBlendFactor = VK_BLEND_FACTOR_ONE,
+        .dstColorBlendFactor = VK_BLEND_FACTOR_ONE,
+        .colorBlendOp = VK_BLEND_OP_ADD,
+        .srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
+        .dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
+        .alphaBlendOp =  VK_BLEND_OP_ADD,
+        .colorWriteMask = 0xf,
+    };
+
+    VkPipelineRasterizationStateCreateInfo& vkraster = mContext.rasterState.rasterization;
+    vkraster.cullMode = VK_CULL_MODE_NONE;
+    vkraster.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    vkraster.depthBiasEnable = VK_FALSE;
+
+    mContext.rasterState.colorTargetCount = 0; // ?
+
+    VulkanBinder::ProgramBundle shaderHandles = { mVertexShader, mFragmentShader };
+
+    mBinder.bindProgramBundle(shaderHandles);
+    mBinder.bindRasterState(mContext.rasterState);
+    mBinder.bindPrimitiveTopology(mRenderPrimitive->primitiveTopology);
+    mBinder.bindVertexArray(mRenderPrimitive->varray);
+
+    VkDescriptorImageInfo samplers[VulkanBinder::SAMPLER_BINDING_COUNT] = {};
+    mBinder.bindSamplers(samplers);
+
+    VkRect2D scissor{
+            .offset = {},
+            .extent = { (uint32_t)right - x, (uint32_t)top - y }
+    };
+
+
+    vkCmdSetScissor(cmdbuffer, 0, 1, &scissor);
+
+    // Bind new descriptor sets if they need to change.
+    VkDescriptorSet descriptors[3];
+    VkPipelineLayout pipelineLayout;
+    if (mBinder.getOrCreateDescriptors(descriptors, &pipelineLayout)) {
+        vkCmdBindDescriptorSets(cmdbuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 3,
+                descriptors, 0, nullptr);
+    }
+
+    // Bind the pipeline if it changed. This can happen, for example, if the raster state changed.
+    // Creating a new pipeline is slow, so we should consider using pipeline cache objects.
+    VkPipeline pipeline;
+    if (mBinder.getOrCreatePipeline(&pipeline)) {
+        vkCmdBindPipeline(cmdbuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+    }
+
+    vkCmdBindVertexBuffers(cmdbuffer, 0, (uint32_t) mRenderPrimitive->buffers.size(),
+            mRenderPrimitive->buffers.data(), mRenderPrimitive->offsets.data());
+
+    vkCmdDrawIndexed(cmdbuffer, indexCount, instanceCount, firstIndex, vertexOffset, firstInstId);
+
 }
 
 } // namespace filament

@@ -98,7 +98,7 @@ VulkanDriver::VulkanDriver(VulkanPlatform* platform,
         DriverBase(new ConcreteDispatcher<VulkanDriver>()),
         mContextManager(*platform),
         mStagePool(mContext, mDisposer),
-        mBlitter(mContext, mStagePool, mDisposer),
+        mBlitter(mContext, mStagePool, mDisposer, mBinder),
         mFramebufferCache(mContext),
         mSamplerCache(mContext) {
     mContext.rasterState = mBinder.getDefaultRasterState();

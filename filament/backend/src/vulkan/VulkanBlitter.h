@@ -22,12 +22,14 @@
 namespace filament {
 namespace backend {
 
+class VulkanBinder;
 class VulkanBuffer;
+struct VulkanRenderPrimitive;
 
 class VulkanBlitter {
 public:
-    VulkanBlitter(VulkanContext& context, VulkanStagePool& stagePool, VulkanDisposer& disposer) :
-            mContext(context), mStagePool(stagePool), mDisposer(disposer) {}
+    VulkanBlitter(VulkanContext& context, VulkanStagePool& stagePool, VulkanDisposer& disposer,
+            VulkanBinder& binder);
 
     struct BlitArgs {
         const VulkanRenderTarget* dstTarget;
@@ -57,9 +59,12 @@ private:
     VkShaderModule mVertexShader = VK_NULL_HANDLE;
     VkShaderModule mFragmentShader = VK_NULL_HANDLE;
     VulkanBuffer* mTriangleVertices = nullptr;
+    VulkanRenderPrimitive* mRenderPrimitive;
+
     VulkanContext& mContext;
     VulkanStagePool& mStagePool;
     VulkanDisposer& mDisposer;
+    VulkanBinder& mBinder;
 };
 
 } // namespace filament
