@@ -49,7 +49,7 @@ void VulkanBlitter::blitColor(VkCommandBuffer cmdBuffer, BlitArgs args) {
     }
 #endif
 
-    blitFast(aspect, args.filter, args.srcTarget, src, dst, args.srcRectPair, args.dstRectPair,
+    blitFast(aspect, args.filter, args.srcTarget->getExtent(), src, dst, args.srcRectPair, args.dstRectPair,
             cmdBuffer);
 }
 
@@ -74,17 +74,17 @@ void VulkanBlitter::blitDepth(VkCommandBuffer cmdBuffer, BlitArgs args) {
 #endif
 
     if (src.texture && src.texture->samples > 1 && dst.texture && dst.texture->samples == 1) {
-        blitSlowDepth(aspect, args.filter, args.srcTarget, src, dst, args.srcRectPair,
+        blitSlowDepth(aspect, args.filter, args.srcTarget->getExtent(), src, dst, args.srcRectPair,
             args.dstRectPair, cmdBuffer);
         return;
     }
 
-    blitFast(aspect, args.filter, args.srcTarget, src, dst, args.srcRectPair, args.dstRectPair,
-            cmdBuffer);
+    blitFast(aspect, args.filter, args.srcTarget->getExtent(), src, dst, args.srcRectPair,
+            args.dstRectPair, cmdBuffer);
 }
 
 void VulkanBlitter::blitFast(VkImageAspectFlags aspect, VkFilter filter,
-    const VulkanRenderTarget* srcTarget, VulkanAttachment src, VulkanAttachment dst,
+    const VkExtent2D srcExtent, VulkanAttachment src, VulkanAttachment dst,
     const VkOffset3D srcRect[2], const VkOffset3D dstRect[2], VkCommandBuffer cmdbuffer) {
     const VkImageBlit blitRegions[1] = {{
         .srcSubresource = { aspect, src.level, src.layer, 1 },
@@ -92,8 +92,6 @@ void VulkanBlitter::blitFast(VkImageAspectFlags aspect, VkFilter filter,
         .dstSubresource = { aspect, dst.level, dst.layer, 1 },
         .dstOffsets = { dstRect[0], dstRect[1] }
     }};
-
-    const VkExtent2D srcExtent = srcTarget->getExtent();
 
     const VkImageResolve resolveRegions[1] = {{
         .srcSubresource = { aspect, src.level, src.layer, 1 },
@@ -177,14 +175,14 @@ void VulkanBlitter::lazyInit() noexcept {
         +1.0f, +1.0f,
     };
 
-    mTriangleVertices = new VulkanBuffer(mContext, mStagePool, mDisposer, this,
+    mTriangleVertices = new VulkanBuffer(mContext, mStagePool, mDisposer, nullptr,
             VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, sizeof(kTriangleVertices));
 
     mTriangleVertices->loadFromCpu(kTriangleVertices, 0, sizeof(kTriangleVertices));
 }
 
 void VulkanBlitter::blitSlowDepth(VkImageAspectFlags aspect, VkFilter filter,
-        const VulkanRenderTarget* srcTarget, VulkanAttachment src, VulkanAttachment dst,
+        const VkExtent2D srcExtent, VulkanAttachment src, VulkanAttachment dst,
         const VkOffset3D srcRect[2], const VkOffset3D dstRect[2], VkCommandBuffer cmdBuffer) {
     lazyInit();
     // TODO

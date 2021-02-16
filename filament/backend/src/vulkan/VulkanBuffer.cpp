@@ -55,7 +55,12 @@ void VulkanBuffer::loadFromCpu(const void* cpuData, uint32_t byteOffset, uint32_
     auto copyToDevice = [this, numBytes, stage] (VulkanCommandBuffer& commands) {
         VkBufferCopy region { .size = numBytes };
         vkCmdCopyBuffer(commands.cmdbuffer, stage->buffer, mGpuBuffer, 1, &region);
-        mDisposer.acquire(mDisposerKey, commands.resources);
+
+        // If mDisposerKey is non-null, do not allow its assocated object to be destroyed while the
+        // current command buffer is still in use.
+        if (mDisposerKey) {
+            mDisposer.acquire(mDisposerKey, commands.resources);
+        }
 
         // Ensure that the copy finishes before the next draw call.
         VkBufferMemoryBarrier barrier {

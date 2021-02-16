@@ -46,12 +46,12 @@ public:
 private:
     void lazyInit() noexcept;
 
-    void blitFast(VkImageAspectFlags aspect, VkFilter filter, const VulkanRenderTarget* srcTarget,
+    void blitFast(VkImageAspectFlags aspect, VkFilter filter, const VkExtent2D srcExtent,
             VulkanAttachment src, VulkanAttachment dst, const VkOffset3D srcRect[2],
             const VkOffset3D dstRect[2], VkCommandBuffer cmdBuffer);
 
     void blitSlowDepth(VkImageAspectFlags aspect, VkFilter filter,
-            const VulkanRenderTarget* srcTarget, VulkanAttachment src, VulkanAttachment dst,
+            const VkExtent2D srcExtent, VulkanAttachment src, VulkanAttachment dst,
             const VkOffset3D srcRect[2], const VkOffset3D dstRect[2], VkCommandBuffer cmdBuffer);
 
     VkShaderModule mVertexShader = VK_NULL_HANDLE;
