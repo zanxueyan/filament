@@ -17,18 +17,16 @@
 package com.google.android.filament.gltf
 
 import android.annotation.SuppressLint
-import android.app.Activity
 import android.os.Bundle
-import android.view.Choreographer
-import android.view.GestureDetector
-import android.view.MotionEvent
-import android.view.SurfaceView
+import android.view.*
+import androidx.appcompat.app.AppCompatActivity
 import com.google.android.filament.utils.KtxLoader
 import com.google.android.filament.utils.ModelViewer
 import com.google.android.filament.utils.Utils
 import java.nio.ByteBuffer
 
-class MainActivity : Activity() {
+
+class MainActivity : AppCompatActivity() {
 
     companion object {
         // Load the library for the utility layer, which in turn loads gltfio and the Filament core.
@@ -45,7 +43,11 @@ class MainActivity : Activity() {
     @SuppressLint("ClickableViewAccessibility")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        surfaceView = SurfaceView(this).apply { setContentView(this) }
+        setContentView(R.layout.layout)
+        setSupportActionBar(findViewById(R.id.toolbar))
+
+        surfaceView = findViewById(R.id.surfaceView)
+
         choreographer = Choreographer.getInstance()
 
         doubleTapDetector = GestureDetector(applicationContext, doubleTapListener)
@@ -72,6 +74,28 @@ class MainActivity : Activity() {
         val bloomOptions = modelViewer.view.bloomOptions
         bloomOptions.enabled = true
         modelViewer.view.bloomOptions = bloomOptions
+
+        //val actionBar = this.actionBar!!
+        //actionBar.setHomeAsUpIndicator(R.drawable.hamburger);
+        //actionBar.setDisplayHomeAsUpEnabled(true)
+    }
+
+    override fun onCreateOptionsMenu(menu: Menu?): Boolean {
+        // Inflate the menu; this adds items to the action bar if it is present.
+        menuInflater.inflate(R.menu.main_menu, menu)
+        return true
+    }
+
+    override fun onOptionsItemSelected(item: MenuItem) = when (item.itemId) {
+
+        R.id.action_qrcode -> {
+            // TODO: show the QR code scanner
+            true
+        }
+
+        else -> {
+            super.onOptionsItemSelected(item)
+        }
     }
 
     private fun createRenderables() {
