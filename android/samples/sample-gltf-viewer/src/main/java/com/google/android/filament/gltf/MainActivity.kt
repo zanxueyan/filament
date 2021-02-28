@@ -17,10 +17,15 @@
 package com.google.android.filament.gltf
 
 import android.annotation.SuppressLint
+import android.os.AsyncTask
 import android.os.Bundle
+import android.util.Size
 import android.view.*
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.camera.core.CameraSelector
+import androidx.camera.core.ImageAnalysis
+import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.content.ContextCompat
@@ -63,7 +68,7 @@ class MainActivity : AppCompatActivity() {
 
         cameraProviderFuture = ProcessCameraProvider.getInstance(this)
 
-        cameraProviderFuture.addListener(Runnable {
+        cameraProviderFuture.addListener({
             val cameraProvider = cameraProviderFuture.get()
             bindPreview(cameraProvider)
         }, ContextCompat.getMainExecutor(this))
@@ -96,17 +101,29 @@ class MainActivity : AppCompatActivity() {
         modelViewer.view.bloomOptions = bloomOptions
     }
 
-    fun bindPreview(cameraProvider : ProcessCameraProvider) {
-        var preview : Preview = Preview.Builder()
-                .build()
+    private fun bindPreview(cameraProvider: ProcessCameraProvider) {
+        val preview : Preview = Preview.Builder().build()
 
-        var cameraSelector : CameraSelector = CameraSelector.Builder()
+        val cameraSelector : CameraSelector = CameraSelector.Builder()
                 .requireLensFacing(CameraSelector.LENS_FACING_BACK)
                 .build()
 
         preview.setSurfaceProvider(previewView.createSurfaceProvider())
 
-        var camera = cameraProvider.bindToLifecycle(this as LifecycleOwner, cameraSelector, preview)
+        val imageAnalysis = ImageAnalysis.Builder()
+                .setTargetResolution(Size(1280, 720))
+                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                .build()
+
+        imageAnalysis.setAnalyzer(AsyncTask.THREAD_POOL_EXECUTOR, { imageProxy -> scanQRCode(imageProxy) })
+
+        Toast.makeText(
+                this.applicationContext,
+                "Bound",
+                Toast.LENGTH_SHORT)
+                .show()
+
+        cameraProvider.bindToLifecycle(this as LifecycleOwner, cameraSelector, imageAnalysis, preview)
         previewView.visibility = View.GONE
     }
 
@@ -116,9 +133,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onOptionsItemSelected(item: MenuItem) = when (item.itemId) {
-
         R.id.action_qrcode -> {
-
             if (previewView.visibility == View.GONE) {
                 surfaceView.visibility = View.GONE
                 previewView.visibility = View.VISIBLE
@@ -126,45 +141,30 @@ class MainActivity : AppCompatActivity() {
                 surfaceView.visibility = View.VISIBLE
                 previewView.visibility = View.GONE
             }
-
-//            val image = InputImage.fromMediaImage(mediaImage, rotation)
-//            scanQRCode(image)
             true
-
         }
-
         else -> {
             super.onOptionsItemSelected(item)
         }
     }
 
-    private fun scanQRCode(image: InputImage) {
-        // [START set_detector_options]
-        val options = BarcodeScannerOptions.Builder()
-                .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
-                .build()
-        // [END set_detector_options]
-
-        // [START get_detector]
-        val scanner = BarcodeScanning.getClient()
-        // Or, to specify the formats to recognize:
-        // val scanner = BarcodeScanning.getClient(options)
-        // [END get_detector]
-
-        // [START run_detector]
-        val result = scanner.process(image)
+    @SuppressLint("UnsafeExperimentalUsageError")
+    private fun scanQRCode(imageProxy: ImageProxy) {
+        val mediaImage = imageProxy.image ?: return
+        val options = BarcodeScannerOptions.Builder().setBarcodeFormats(Barcode.FORMAT_QR_CODE).build()
+        val image = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
+        val scanner = BarcodeScanning.getClient(options)
+        scanner.process(image)
                 .addOnSuccessListener { barcodes ->
-                    // Task completed successfully
-                    // [START_EXCLUDE]
-                    // [START get_barcodes]
                     for (barcode in barcodes) {
-                        val bounds = barcode.boundingBox
-                        val corners = barcode.cornerPoints
-
-                        val rawValue = barcode.rawValue
-
                         val valueType = barcode.valueType
-                        // See API reference for complete list of supported types
+
+                        Toast.makeText(
+                                this.applicationContext,
+                                "Woot",
+                                Toast.LENGTH_SHORT)
+                                .show()
+
                         when (valueType) {
                             Barcode.TYPE_WIFI -> {
                                 val ssid = barcode.wifi!!.ssid
@@ -177,14 +177,11 @@ class MainActivity : AppCompatActivity() {
                             }
                         }
                     }
-                    // [END get_barcodes]
-                    // [END_EXCLUDE]
+                    imageProxy.close()
                 }
                 .addOnFailureListener {
-                    // Task failed with an exception
-                    // ...
+                    imageProxy.close()
                 }
-        // [END run_detector]
     }
 
     private fun createRenderables() {
