@@ -19,9 +19,9 @@ package com.google.android.filament.gltf
 import android.annotation.SuppressLint
 import android.os.AsyncTask
 import android.os.Bundle
+import android.util.Log
 import android.util.Size
 import android.view.*
-import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
@@ -38,6 +38,11 @@ import com.google.mlkit.vision.barcode.Barcode
 import com.google.mlkit.vision.barcode.BarcodeScannerOptions
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.common.InputImage
+import kotlinx.coroutines.*
+import java.io.IOException
+import java.net.HttpURLConnection
+import java.net.URL
+import java.nio.Buffer
 import java.nio.ByteBuffer
 
 class MainActivity : AppCompatActivity() {
@@ -45,6 +50,7 @@ class MainActivity : AppCompatActivity() {
     companion object {
         // Load the library for the utility layer, which in turn loads gltfio and the Filament core.
         init { Utils.init() }
+        private const val TAG = "zamboni"
     }
 
     private lateinit var surfaceView: SurfaceView
@@ -54,7 +60,6 @@ class MainActivity : AppCompatActivity() {
     private val doubleTapListener = DoubleTapListener()
     private lateinit var doubleTapDetector: GestureDetector
     private lateinit var previewView: androidx.camera.view.PreviewView
-
     private lateinit var cameraProviderFuture : ListenableFuture<ProcessCameraProvider>
 
     @SuppressLint("ClickableViewAccessibility")
@@ -65,6 +70,9 @@ class MainActivity : AppCompatActivity() {
 
         surfaceView = findViewById(R.id.surfaceView)
         previewView = findViewById(R.id.previewView)
+
+        surfaceView.visibility = View.VISIBLE
+        previewView.visibility = View.GONE
 
         cameraProviderFuture = ProcessCameraProvider.getInstance(this)
 
@@ -102,13 +110,13 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun bindPreview(cameraProvider: ProcessCameraProvider) {
-        val preview : Preview = Preview.Builder().build()
+        val preview : Preview = Preview.Builder().build().also {
+            it.setSurfaceProvider(previewView.createSurfaceProvider())
+        }
 
         val cameraSelector : CameraSelector = CameraSelector.Builder()
                 .requireLensFacing(CameraSelector.LENS_FACING_BACK)
                 .build()
-
-        preview.setSurfaceProvider(previewView.createSurfaceProvider())
 
         val imageAnalysis = ImageAnalysis.Builder()
                 .setTargetResolution(Size(1280, 720))
@@ -117,14 +125,12 @@ class MainActivity : AppCompatActivity() {
 
         imageAnalysis.setAnalyzer(AsyncTask.THREAD_POOL_EXECUTOR, { imageProxy -> scanQRCode(imageProxy) })
 
-        Toast.makeText(
-                this.applicationContext,
-                "Bound",
-                Toast.LENGTH_SHORT)
-                .show()
-
-        cameraProvider.bindToLifecycle(this as LifecycleOwner, cameraSelector, imageAnalysis, preview)
-        previewView.visibility = View.GONE
+        try {
+            cameraProvider.unbindAll()
+            cameraProvider.bindToLifecycle(this as LifecycleOwner, cameraSelector, imageAnalysis, preview)
+        } catch (exc: Exception) {
+            Log.e(TAG, "Preview binding failed", exc)
+        }
     }
 
     override fun onCreateOptionsMenu(menu: Menu?): Boolean {
@@ -151,37 +157,74 @@ class MainActivity : AppCompatActivity() {
     @SuppressLint("UnsafeExperimentalUsageError")
     private fun scanQRCode(imageProxy: ImageProxy) {
         val mediaImage = imageProxy.image ?: return
+        if (previewView.visibility != View.VISIBLE) {
+            imageProxy.close()
+            return
+        }
         val options = BarcodeScannerOptions.Builder().setBarcodeFormats(Barcode.FORMAT_QR_CODE).build()
         val image = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
         val scanner = BarcodeScanning.getClient(options)
         scanner.process(image)
                 .addOnSuccessListener { barcodes ->
                     for (barcode in barcodes) {
-                        val valueType = barcode.valueType
-
-                        Toast.makeText(
-                                this.applicationContext,
-                                "Woot",
-                                Toast.LENGTH_SHORT)
-                                .show()
-
-                        when (valueType) {
-                            Barcode.TYPE_WIFI -> {
-                                val ssid = barcode.wifi!!.ssid
-                                val password = barcode.wifi!!.password
-                                val type = barcode.wifi!!.encryptionType
-                            }
-                            Barcode.TYPE_URL -> {
-                                val title = barcode.url!!.title
-                                val url = barcode.url!!.url
-                            }
-                        }
+                        downloadFromBarcode(barcode)
                     }
                     imageProxy.close()
                 }
                 .addOnFailureListener {
                     imageProxy.close()
                 }
+    }
+
+    private fun downloadFromBarcode(barcode: Barcode) {
+        if (barcode.valueType != Barcode.TYPE_URL) return
+        val url = barcode.url!!.url!!
+
+        // At this point we successfully scanning a QRCode with a well-formed URL, so we go back to
+        // the 3D view immediately, without waiting to see if we can successfully fetch anything
+        // from the URL. This lets the user know that we detected a QR code and prevents a stream
+        // of repeated fetch requests.
+        surfaceView.visibility = View.VISIBLE
+        previewView.visibility = View.GONE
+
+        val callback = { buffer: Buffer ->
+            // TODO: let the user know that the GLB has been downloaded via Toolbar text.
+            Log.i(TAG, "Fetched " + buffer.capacity().toString() + " bytes")
+
+            Unit
+        }
+
+        // TODO: let the user know that the download is starting via Toolbar text.
+        Log.i(TAG, "Fetching URL " + url)
+
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                downloadGlb(url, callback)
+            } catch (exc: IOException) {
+                // TODO: let the user know that the download failed via Toolbar text.
+                Log.e(TAG, "URL fetch failed", exc)
+            }
+        }
+    }
+
+    private suspend fun downloadGlb(url: String, callback: (Buffer) -> Unit) {
+        var buffer: Buffer? = null
+
+        withContext(Dispatchers.IO) {
+            val connection = URL(url).openConnection() as HttpURLConnection
+            connection.readTimeout = 2000 // two second timeout
+            val reader = connection.inputStream
+            val bytes = reader.readBytes()
+            buffer = ByteBuffer.wrap(bytes)
+            callback(buffer!!)
+        }
+
+        withContext(Dispatchers.Main) {
+            modelViewer.destroyModel()
+            modelViewer.loadModelGlb(buffer!!)
+            modelViewer.transformToUnitCube()
+        }
+
     }
 
     private fun createRenderables() {
