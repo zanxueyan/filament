@@ -20,15 +20,20 @@ import android.annotation.SuppressLint
 import android.os.Bundle
 import android.view.*
 import androidx.appcompat.app.AppCompatActivity
+import androidx.camera.core.CameraSelector
+import androidx.camera.core.Preview
+import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.LifecycleOwner
 import com.google.android.filament.utils.KtxLoader
 import com.google.android.filament.utils.ModelViewer
 import com.google.android.filament.utils.Utils
-import java.nio.ByteBuffer
+import com.google.common.util.concurrent.ListenableFuture
 import com.google.mlkit.vision.barcode.Barcode
-import com.google.mlkit.vision.barcode.BarcodeScanner
 import com.google.mlkit.vision.barcode.BarcodeScannerOptions
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.common.InputImage
+import java.nio.ByteBuffer
 
 class MainActivity : AppCompatActivity() {
 
@@ -43,6 +48,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var modelViewer: ModelViewer
     private val doubleTapListener = DoubleTapListener()
     private lateinit var doubleTapDetector: GestureDetector
+    private lateinit var previewView: androidx.camera.view.PreviewView
+
+    private lateinit var cameraProviderFuture : ListenableFuture<ProcessCameraProvider>
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -51,6 +59,14 @@ class MainActivity : AppCompatActivity() {
         setSupportActionBar(findViewById(R.id.toolbar))
 
         surfaceView = findViewById(R.id.surfaceView)
+        previewView = findViewById(R.id.previewView)
+
+        cameraProviderFuture = ProcessCameraProvider.getInstance(this)
+
+        cameraProviderFuture.addListener(Runnable {
+            val cameraProvider = cameraProviderFuture.get()
+            bindPreview(cameraProvider)
+        }, ContextCompat.getMainExecutor(this))
 
         choreographer = Choreographer.getInstance()
 
@@ -80,6 +96,20 @@ class MainActivity : AppCompatActivity() {
         modelViewer.view.bloomOptions = bloomOptions
     }
 
+    fun bindPreview(cameraProvider : ProcessCameraProvider) {
+        var preview : Preview = Preview.Builder()
+                .build()
+
+        var cameraSelector : CameraSelector = CameraSelector.Builder()
+                .requireLensFacing(CameraSelector.LENS_FACING_BACK)
+                .build()
+
+        preview.setSurfaceProvider(previewView.createSurfaceProvider())
+
+        var camera = cameraProvider.bindToLifecycle(this as LifecycleOwner, cameraSelector, preview)
+        previewView.visibility = View.GONE
+    }
+
     override fun onCreateOptionsMenu(menu: Menu?): Boolean {
         menuInflater.inflate(R.menu.main_menu, menu)
         return true
@@ -89,12 +119,18 @@ class MainActivity : AppCompatActivity() {
 
         R.id.action_qrcode -> {
 
+            if (previewView.visibility == View.GONE) {
+                surfaceView.visibility = View.GONE
+                previewView.visibility = View.VISIBLE
+            } else {
+                surfaceView.visibility = View.VISIBLE
+                previewView.visibility = View.GONE
+            }
 
-
-            val image = InputImage.fromMediaImage(mediaImage, rotation)
-
-            scanQRCode(image)
+//            val image = InputImage.fromMediaImage(mediaImage, rotation)
+//            scanQRCode(image)
             true
+
         }
 
         else -> {
