@@ -178,8 +178,8 @@ void SimpleViewer::renderUserInterface(float timeStepInSeconds, View* guiView, f
         mImGuiHelper = new ImGuiHelper(mEngine, guiView, "");
 
         // TODO: this is not the best way to handle high DPI in ImGui, but it is fine when using the
-        // proggy font. Users need refresh their window when dragging between displas with different
-        // pixel ratios.
+        // proggy font. Users need to refresh their window when dragging between displays with
+        // different pixel ratios.
         ImGui::GetIO().FontGlobalScale = pixelRatio;
         ImGui::GetStyle().ScaleAllSizes(pixelRatio);
     }

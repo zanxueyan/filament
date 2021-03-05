@@ -113,7 +113,6 @@ void ImGuiHelper::createAtlasTexture(Engine* engine) {
 
 ImGuiHelper::~ImGuiHelper() {
     mEngine->destroy(mScene);
-    mEngine->destroy(mRenderable);
     mEngine->destroyCameraComponent(mCameraEntity);
 
     for (auto& mi : mMaterialInstances) {

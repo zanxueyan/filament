@@ -20,6 +20,7 @@
 
 using namespace filament;
 using namespace filament::viewer;
+using namespace utils;
 
 extern "C" JNIEXPORT jlong JNICALL
 Java_com_google_android_filament_utils_AutomationEngine_nCreateAutomationEngine(JNIEnv* env, jclass,
@@ -92,7 +93,8 @@ Java_com_google_android_filament_utils_AutomationEngine_nTick(JNIEnv* env, jclas
 
 extern "C" JNIEXPORT void JNICALL
 Java_com_google_android_filament_utils_AutomationEngine_nApplySettings(JNIEnv* env, jclass klass,
-        jlong nativeAutomation, jstring json, jlong view, jlongArray materials) {
+        jlong nativeAutomation, jstring json, jlong view, jlongArray materials, jlong nativeIbl,
+        jint lightEntity, jlong nativeLm, jlong scene) {
     using MaterialPointer = MaterialInstance*;
     jsize materialCount = 0;
     jlong* longMaterials = nullptr;
@@ -108,7 +110,9 @@ Java_com_google_android_filament_utils_AutomationEngine_nApplySettings(JNIEnv* e
     AutomationEngine* automation = (AutomationEngine*) nativeAutomation;
     const char* nativeJson = env->GetStringUTFChars(json, 0);
     size_t jsonLength = env->GetStringUTFLength(json);
-    automation->applySettings(nativeJson, jsonLength, (View*) view, ptrMaterials, materialCount);
+    automation->applySettings(nativeJson, jsonLength, (View*) view, ptrMaterials, materialCount,
+            (IndirectLight*) nativeIbl, (Entity&) lightEntity, (LightManager*) nativeLm,
+            (Scene*) scene);
     env->ReleaseStringUTFChars(json, nativeJson);
     if (longMaterials) {
         env->ReleaseLongArrayElements(materials, longMaterials, 0);

@@ -243,7 +243,9 @@ class MainActivity : Activity() {
 
     fun loadSettings(message: RemoteServer.ReceivedMessage) {
         val json = StandardCharsets.UTF_8.decode(message.buffer).toString()
-        automation.applySettings(json, modelViewer.view, null)
+        automation.applySettings(json, modelViewer.view, null,
+                modelViewer.scene.indirectLight, modelViewer.light, modelViewer.engine.lightManager,
+                modelViewer.scene)
     }
 
     inner class FrameCallback : Choreographer.FrameCallback {

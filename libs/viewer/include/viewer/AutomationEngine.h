@@ -21,6 +21,7 @@
 
 namespace filament {
 
+class LightManager;
 class MaterialInstance;
 class Renderer;
 class View;
@@ -152,7 +153,8 @@ public:
      * remote control, as opposed to iterating through a predetermined test sequence.
      */
     void applySettings(const char* json, size_t jsonLength, View* view,
-            MaterialInstance* const* materials, size_t materialCount);
+            MaterialInstance* const* materials, size_t materialCount, IndirectLight* ibl,
+            utils::Entity sunlight, LightManager* lm, Scene* scene);
 
     /**
      * Signals that batch mode can begin. Call this after all meshes and textures finish loading.

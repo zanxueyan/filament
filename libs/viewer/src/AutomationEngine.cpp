@@ -133,13 +133,15 @@ void AutomationEngine::exportSettings(const Settings& settings, const char* file
 }
 
 void AutomationEngine::applySettings(const char* json, size_t jsonLength, View* view,
-        MaterialInstance* const* materials, size_t materialCount) {
-                JsonSerializer serializer;
+        MaterialInstance* const* materials, size_t materialCount, IndirectLight* ibl,
+        utils::Entity sunlight, LightManager* lm, Scene* scene) {
+    JsonSerializer serializer;
     serializer.readJson(json, jsonLength, mSettings);
     viewer::applySettings(mSettings->view, view);
     for (size_t i = 0; i < materialCount; i++) {
         viewer::applySettings(mSettings->material, materials[i]);
     }
+    viewer::applySettings(mSettings->lighting, ibl, sunlight, lm, scene);
 }
 
 void AutomationEngine::tick(View* view, MaterialInstance* const* materials, size_t materialCount,

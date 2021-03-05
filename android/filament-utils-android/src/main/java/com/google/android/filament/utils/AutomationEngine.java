@@ -19,6 +19,10 @@ package com.google.android.filament.utils;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.google.android.filament.Entity;
+import com.google.android.filament.IndirectLight;
+import com.google.android.filament.LightManager;
+import com.google.android.filament.Scene;
 import com.google.android.filament.View;
 import com.google.android.filament.MaterialInstance;
 import com.google.android.filament.Renderer;
@@ -145,7 +149,8 @@ public class AutomationEngine {
      * remote control, as opposed to iterating through a predetermined test sequence.
      */
     public void applySettings(@NonNull String settingsJson, @NonNull View view,
-            @Nullable MaterialInstance[] materials) {
+            @Nullable MaterialInstance[] materials, @Nullable IndirectLight ibl, @Entity int light,
+            @NonNull LightManager lm, @NonNull Scene scene) {
         long[] nativeMaterialInstances = null;
         if (materials != null) {
             nativeMaterialInstances = new long[materials.length];
@@ -154,7 +159,11 @@ public class AutomationEngine {
             }
         }
         long nativeView = view.getNativeObject();
-        nApplySettings(mNativeObject, settingsJson, nativeView, nativeMaterialInstances);
+        long nativeIbl = ibl == null ? 0 : ibl.getNativeObject();
+        long nativeLm = lm.getNativeObject();
+        long nativeScene = scene.getNativeObject();
+        nApplySettings(mNativeObject, settingsJson, nativeView, nativeMaterialInstances,
+                nativeIbl, light, nativeLm, nativeScene);
     }
 
     /**
@@ -180,11 +189,14 @@ public class AutomationEngine {
 
     private static native long nCreateAutomationEngine(String jsonSpec);
     private static native long nCreateDefaultAutomationEngine();
-    private static native void nSetOptions(long nativeObject, float sleepDuration, int minFrameCount, boolean verbose);
+    private static native void nSetOptions(long nativeObject, float sleepDuration,
+            int minFrameCount, boolean verbose);
     private static native void nStartRunning(long nativeObject);
     private static native void nStartBatchMode(long nativeObject);
-    private static native void nTick(long nativeObject, long view, long[] materials, long renderer, float deltaTime);
-    private static native void nApplySettings(long nativeObject, String jsonSettings, long view, long[] materials);
+    private static native void nTick(long nativeObject, long view, long[] materials, long renderer,
+            float deltaTime);
+    private static native void nApplySettings(long nativeObject, String jsonSettings, long view,
+            long[] materials, long ibl, int light, long lightManager, long scene);
     private static native void nSignalBatchMode(long nativeObject);
     private static native void nStopRunning(long nativeObject);
     private static native boolean nShouldClose(long nativeObject);
