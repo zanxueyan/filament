@@ -24,6 +24,10 @@
 #include <Metal/Metal.h>
 #include <QuartzCore/QuartzCore.h>
 
+#include <stack>
+
+#include <tsl/robin_set.h>
+
 namespace filament {
 namespace backend {
 namespace metal {
@@ -58,6 +62,7 @@ struct MetalContext {
     DepthStencilStateTracker depthStencilState;
     UniformBufferState uniformState[VERTEX_BUFFER_START];
     CullModeStateTracker cullModeState;
+    WindingStateTracker windingState;
 
     // State caches.
     DepthStencilStateCache depthStencilStateCache;
@@ -65,6 +70,9 @@ struct MetalContext {
     SamplerStateCache samplerStateCache;
 
     MetalSamplerGroup* samplerBindings[SAMPLER_BINDING_COUNT] = {};
+
+    // Keeps track of all alive sampler groups.
+    tsl::robin_set<MetalSamplerGroup*> samplerGroups;
 
     MetalBufferPool* bufferPool;
 
@@ -86,6 +94,8 @@ struct MetalContext {
     uint64_t signalId = 1;
 
     TimerQueryInterface* timerQueryImpl;
+
+    std::stack<const char*> groupMarkers;
 };
 
 id<MTLCommandBuffer> getPendingCommandBuffer(MetalContext* context);

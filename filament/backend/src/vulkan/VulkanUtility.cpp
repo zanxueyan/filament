@@ -17,6 +17,7 @@
 #include "VulkanUtility.h"
 
 #include <utils/Panic.h>
+#include <utils/debug.h>
 
 #include "private/backend/BackendUtils.h"
 
@@ -374,10 +375,24 @@ PixelDataType getComponentType(VkFormat format) {
         case VK_FORMAT_R32G32B32A32_UINT: return PixelDataType::UINT;
         case VK_FORMAT_R32G32B32A32_SINT: return PixelDataType::INT;
         case VK_FORMAT_R32G32B32A32_SFLOAT: return PixelDataType::FLOAT;
-        default: assert(false && "Unknown data type, conversion is not supported.");
+        default: assert_invariant(false && "Unknown data type, conversion is not supported.");
     }
     return {};
 }
 
 } // namespace filament
 } // namespace backend
+
+bool operator<(const VkImageSubresourceRange& a, const VkImageSubresourceRange& b) {
+    if (a.aspectMask < b.aspectMask) return true;
+    if (a.aspectMask > b.aspectMask) return false;
+    if (a.baseMipLevel < b.baseMipLevel) return true;
+    if (a.baseMipLevel > b.baseMipLevel) return false;
+    if (a.levelCount < b.levelCount) return true;
+    if (a.levelCount > b.levelCount) return false;
+    if (a.baseArrayLayer < b.baseArrayLayer) return true;
+    if (a.baseArrayLayer > b.baseArrayLayer) return false;
+    if (a.layerCount < b.layerCount) return true;
+    if (a.layerCount > b.layerCount) return false;
+    return false;
+}

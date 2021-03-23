@@ -62,6 +62,18 @@ VKAPI_ATTR VkBool32 VKAPI_CALL debugReportCallback(VkDebugReportFlagsEXT flags,
 VKAPI_ATTR VkBool32 VKAPI_CALL debugUtilsCallback(VkDebugUtilsMessageSeverityFlagBitsEXT severity,
         VkDebugUtilsMessageTypeFlagsEXT types, const VkDebugUtilsMessengerCallbackDataEXT* cbdata,
         void* pUserData) {
+    // TODO: For now, we are silencing an error message relating to writes to the depth buffer
+    // and the fact that we are not using a read-only depth layout.
+    if (!strcmp(cbdata->pMessageIdName, "VUID-vkCmdDrawIndexed-None-04584")) {
+        return VK_FALSE;
+    }
+    // TODO: For now, we are silencing an error message relating to mutable comparison samplers.
+    // It is likely that the internal "depthSampleCompare" feature flag is mistakenly set to false
+    // by the Molten implementation. In my case, the GPU is an AMD Radeon Pro 5500M. See this bug:
+    // https://vulkan.lunarg.com/issue/view/602578385df1127a24f3cb4b
+    if (!strcmp(cbdata->pMessageIdName, "VUID-VkDescriptorImageInfo-mutableComparisonSamplers-04450")) {
+        return VK_FALSE;
+    }
     if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
         utils::slog.e << "VULKAN ERROR: (" << cbdata->pMessageIdName << ") "
                 << cbdata->pMessage << utils::io::endl;
@@ -89,7 +101,10 @@ Driver* VulkanDriverFactory::create(VulkanPlatform* const platform,
 VulkanDriver::VulkanDriver(VulkanPlatform* platform,
         const char* const* ppEnabledExtensions, uint32_t enabledExtensionCount) noexcept :
         DriverBase(new ConcreteDispatcher<VulkanDriver>()),
-        mContextManager(*platform), mStagePool(mContext, mDisposer), mFramebufferCache(mContext),
+        mContextManager(*platform),
+        mBlitter(mContext),
+        mStagePool(mContext, mDisposer),
+        mFramebufferCache(mContext),
         mSamplerCache(mContext) {
     mContext.rasterState = mBinder.getDefaultRasterState();
 
@@ -229,7 +244,7 @@ VulkanDriver::~VulkanDriver() noexcept = default;
 UTILS_NOINLINE
 Driver* VulkanDriver::create(VulkanPlatform* const platform,
         const char* const* ppEnabledExtensions, uint32_t enabledExtensionCount) noexcept {
-    assert(platform);
+    assert_invariant(platform);
     return new VulkanDriver(platform, ppEnabledExtensions, enabledExtensionCount);
 }
 
@@ -250,6 +265,8 @@ void VulkanDriver::terminate() {
     acquireWorkCommandBuffer(mContext);
 
     delete mContext.emptyTexture;
+
+    mBlitter.shutdown();
 
     mDisposer.release(mContext.work.resources);
 
@@ -493,7 +510,7 @@ void VulkanDriver::importTextureR(Handle<HwTexture> th, intptr_t id,
 void VulkanDriver::destroyTexture(Handle<HwTexture> th) {
     if (th) {
         auto texture = handle_cast<VulkanTexture>(mHandleMap, th);
-        mBinder.unbindImageView(texture->imageView);
+        mBinder.unbindImageView(texture->getPrimaryImageView());
         mDisposer.removeReference(texture);
     }
 }
@@ -556,7 +573,7 @@ void VulkanDriver::destroyRenderTarget(Handle<HwRenderTarget> rth) {
 
 void VulkanDriver::createFenceR(Handle<HwFence> fh, int) {
     // We prefer the fence to be created inside a frame, otherwise there's no command buffer.
-    assert(mContext.currentCommands != nullptr && "Fences should be created within a frame.");
+    assert_invariant(mContext.currentCommands != nullptr && "Fences should be created within a frame.");
 
      // As a fallback in release builds, trigger the fence based on the work command buffer.
     if (mContext.currentCommands == nullptr) {
@@ -584,7 +601,7 @@ void VulkanDriver::createSwapChainR(Handle<HwSwapChain> sch, void* nativeWindow,
 
 void VulkanDriver::createSwapChainHeadlessR(Handle<HwSwapChain> sch,
         uint32_t width, uint32_t height, uint64_t flags) {
-    assert(width > 0 && height > 0 && "Vulkan requires non-zero swap chain dimensions.");
+    assert_invariant(width > 0 && height > 0 && "Vulkan requires non-zero swap chain dimensions.");
     auto* swapChain = construct_handle<VulkanSwapChain>(mHandleMap, sch, mContext, width, height);
     mContext.currentSurface = &swapChain->surfaceContext;
 }
@@ -750,21 +767,21 @@ FenceStatus VulkanDriver::wait(Handle<HwFence> fh, uint64_t timeout) {
     std::unique_lock<utils::Mutex> lock(cmdfence->mutex);
     if (!cmdfence->submitted) {
         cmdfence->condition.wait(lock);
-        assert(cmdfence->submitted);
+        assert_invariant(cmdfence->submitted);
     } else {
         lock.unlock();
     }
     if (cmdfence->swapChainDestroyed) {
         return FenceStatus::ERROR;
     }
-    VkResult result = vkWaitForFences(mContext.device, 1, &cmdfence->fence, VK_FALSE, timeout);
+    VkResult result = vkWaitForFences(mContext.device, 1, &cmdfence->fence, VK_TRUE, timeout);
     return result == VK_SUCCESS ? FenceStatus::CONDITION_SATISFIED : FenceStatus::TIMEOUT_EXPIRED;
 }
 
 // We create all textures using VK_IMAGE_TILING_OPTIMAL, so our definition of "supported" is that
 // the GPU supports the given texture format with non-zero optimal tiling features.
 bool VulkanDriver::isTextureFormatSupported(TextureFormat format) {
-    assert(mContext.physicalDevice);
+    assert_invariant(mContext.physicalDevice);
     VkFormat vkformat = getVkFormat(format);
     // We automatically use an alternative format when the client requests DEPTH24.
     if (format == TextureFormat::DEPTH24) {
@@ -792,7 +809,7 @@ bool VulkanDriver::isTextureFormatMipmappable(backend::TextureFormat format) {
 }
 
 bool VulkanDriver::isRenderTargetFormatSupported(TextureFormat format) {
-    assert(mContext.physicalDevice);
+    assert_invariant(mContext.physicalDevice);
     VkFormat vkformat = getVkFormat(format);
     // We automatically use an alternative format when the client requests DEPTH24.
     if (format == TextureFormat::DEPTH24) {
@@ -811,6 +828,10 @@ bool VulkanDriver::isFrameBufferFetchSupported() {
 }
 
 bool VulkanDriver::isFrameTimeSupported() {
+    return true;
+}
+
+bool VulkanDriver::areFeedbackLoopsSupported() {
     return true;
 }
 
@@ -836,9 +857,13 @@ void VulkanDriver::updateIndexBuffer(Handle<HwIndexBuffer> ibh, BufferDescriptor
 void VulkanDriver::update2DImage(Handle<HwTexture> th,
         uint32_t level, uint32_t xoffset, uint32_t yoffset, uint32_t width, uint32_t height,
         PixelBufferDescriptor&& data) {
-    assert(xoffset == 0 && yoffset == 0 && "Offsets not yet supported.");
+    assert_invariant(xoffset == 0 && yoffset == 0 && "Offsets not yet supported.");
     handle_cast<VulkanTexture>(mHandleMap, th)->update2DImage(data, width, height, level);
     scheduleDestroy(std::move(data));
+}
+
+void VulkanDriver::setMinMaxLevels(Handle<HwTexture> th, uint32_t minLevel, uint32_t maxLevel) {
+    handle_cast<VulkanTexture>(mHandleMap, th)->setPrimaryRange(minLevel, maxLevel);
 }
 
 void VulkanDriver::update3DImage(
@@ -846,7 +871,7 @@ void VulkanDriver::update3DImage(
         uint32_t level, uint32_t xoffset, uint32_t yoffset, uint32_t zoffset,
         uint32_t width, uint32_t height, uint32_t depth,
         PixelBufferDescriptor&& data) {
-    assert(xoffset == 0 && yoffset == 0 && zoffset == 0 && "Offsets not yet supported.");
+    assert_invariant(xoffset == 0 && yoffset == 0 && zoffset == 0 && "Offsets not yet supported.");
     handle_cast<VulkanTexture>(mHandleMap, th)->update3DImage(data, width, height, depth, level);
     scheduleDestroy(std::move(data));
 }
@@ -954,14 +979,14 @@ void VulkanDriver::updateSamplerGroup(Handle<HwSamplerGroup> sbh,
 }
 
 void VulkanDriver::beginRenderPass(Handle<HwRenderTarget> rth, const RenderPassParams& params) {
-    assert(mContext.currentCommands);
-    assert(mContext.currentSurface);
+    assert_invariant(mContext.currentCommands);
+    assert_invariant(mContext.currentSurface);
     VulkanSurfaceContext& surface = *mContext.currentSurface;
     mCurrentRenderTarget = handle_cast<VulkanRenderTarget>(mHandleMap, rth);
     VulkanRenderTarget* rt = mCurrentRenderTarget;
 
     const VkExtent2D extent = rt->getExtent();
-    assert(extent.width > 0 && extent.height > 0);
+    assert_invariant(extent.width > 0 && extent.height > 0);
 
     const VulkanAttachment depth = rt->getDepth();
 
@@ -1010,20 +1035,20 @@ void VulkanDriver::beginRenderPass(Handle<HwRenderTarget> rth, const RenderPassP
         } else if (fbkey.samples == 1) {
             fbkey.color[i] = rt->getColor(i).view;
             fbkey.resolve[i] = VK_NULL_HANDLE;
-            assert(fbkey.color[i]);
+            assert_invariant(fbkey.color[i]);
         } else {
             fbkey.color[i] = rt->getMsaaColor(i).view;
             VulkanTexture* texture = rt->getColor(i).texture;
             if (texture && texture->samples == 1) {
                 fbkey.resolve[i] = rt->getColor(i).view;
-                assert(fbkey.resolve[i]);
+                assert_invariant(fbkey.resolve[i]);
             }
-            assert(fbkey.color[i]);
+            assert_invariant(fbkey.color[i]);
         }
     }
     if (depth.format != VK_FORMAT_UNDEFINED) {
         fbkey.depth = rpkey.samples == 1 ? depth.view : rt->getMsaaDepth().view;
-        assert(fbkey.depth);
+        assert_invariant(fbkey.depth);
     }
     VkFramebuffer vkfb = mFramebufferCache.getFramebuffer(fbkey);
 
@@ -1098,9 +1123,9 @@ void VulkanDriver::beginRenderPass(Handle<HwRenderTarget> rth, const RenderPassP
 }
 
 void VulkanDriver::endRenderPass(int) {
-    assert(mContext.currentCommands);
-    assert(mContext.currentSurface);
-    assert(mCurrentRenderTarget);
+    assert_invariant(mContext.currentCommands);
+    assert_invariant(mContext.currentSurface);
+    assert_invariant(mCurrentRenderTarget);
     vkCmdEndRenderPass(mContext.currentCommands->cmdbuffer);
     mCurrentRenderTarget = VK_NULL_HANDLE;
     if (mContext.currentRenderPass.currentSubpass > 0) {
@@ -1116,10 +1141,10 @@ void VulkanDriver::nextSubpass(int) {
     ASSERT_PRECONDITION(mContext.currentRenderPass.currentSubpass == 0,
             "Only two subpasses are currently supported.");
 
-    assert(mContext.currentCommands);
-    assert(mContext.currentSurface);
-    assert(mCurrentRenderTarget);
-    assert(mContext.currentRenderPass.subpassMask);
+    assert_invariant(mContext.currentCommands);
+    assert_invariant(mContext.currentSurface);
+    assert_invariant(mCurrentRenderTarget);
+    assert_invariant(mContext.currentRenderPass.subpassMask);
 
     vkCmdNextSubpass(mContext.currentCommands->cmdbuffer, VK_SUBPASS_CONTENTS_INLINE);
 
@@ -1232,7 +1257,7 @@ void VulkanDriver::commit(Handle<HwSwapChain> sch) {
     }
 
     // The surface can be "out of date" when it has been resized, which is not an error.
-    assert(result == VK_SUCCESS || result == VK_SUBOPTIMAL_KHR ||
+    assert_invariant(result == VK_SUCCESS || result == VK_SUBOPTIMAL_KHR ||
             result == VK_ERROR_OUT_OF_DATE_KHR);
 }
 
@@ -1320,7 +1345,7 @@ void VulkanDriver::readPixels(Handle<HwRenderTarget> src, uint32_t x, uint32_t y
     const VulkanRenderTarget* srcTarget = handle_cast<VulkanRenderTarget>(mHandleMap, src);
     const VulkanTexture* srcTexture = srcTarget->getColor(0).texture;
     const VkFormat swapChainFormat = mContext.currentSurface->surfaceFormat.format;
-    const VkFormat srcFormat = srcTexture ? srcTexture->vkformat : swapChainFormat;
+    const VkFormat srcFormat = srcTexture ? srcTexture->getVkFormat() : swapChainFormat;
     const bool swizzle = srcFormat == VK_FORMAT_B8G8R8A8_UNORM;
 
     // Create a host visible, linearly tiled image as a staging area.
@@ -1493,24 +1518,35 @@ void VulkanDriver::blit(TargetBufferFlags buffers, Handle<HwRenderTarget> dst, V
     const int32_t dstTop = std::min(dstRect.bottom + dstRect.height, dstExtent.height);
     const VkOffset3D dstOffsets[2] = { { dstLeft, dstBottom, 0 }, { dstRight, dstTop, 1 }};
 
+    VkCommandBuffer cmdbuf;
+    if (mContext.currentCommands) {
+        cmdbuf = mContext.currentCommands->cmdbuffer;
+    } else {
+        cmdbuf = acquireWorkCommandBuffer(mContext);;
+    }
+
     if (any(buffers & TargetBufferFlags::DEPTH) && srcTarget->hasDepth() && dstTarget->hasDepth()) {
-        blitDepth(&mContext, dstTarget, dstOffsets, srcTarget, srcOffsets);
+        mBlitter.blitDepth(cmdbuf, {dstTarget, dstOffsets, srcTarget, srcOffsets});
     }
 
     if (any(buffers & TargetBufferFlags::COLOR0)) {
-        blitColor(&mContext, dstTarget, dstOffsets, srcTarget, srcOffsets, vkfilter, 0);
+        mBlitter.blitColor(cmdbuf, {dstTarget, dstOffsets, srcTarget, srcOffsets, vkfilter, 0});
     }
 
     if (any(buffers & TargetBufferFlags::COLOR1)) {
-        blitColor(&mContext, dstTarget, dstOffsets, srcTarget, srcOffsets, vkfilter, 1);
+        mBlitter.blitColor(cmdbuf, {dstTarget, dstOffsets, srcTarget, srcOffsets, vkfilter, 1});
     }
 
     if (any(buffers & TargetBufferFlags::COLOR2)) {
-        blitColor(&mContext, dstTarget, dstOffsets, srcTarget, srcOffsets, vkfilter, 2);
+        mBlitter.blitColor(cmdbuf, {dstTarget, dstOffsets, srcTarget, srcOffsets, vkfilter, 2});
     }
 
     if (any(buffers & TargetBufferFlags::COLOR3)) {
-        blitColor(&mContext, dstTarget, dstOffsets, srcTarget, srcOffsets, vkfilter, 3);
+        mBlitter.blitColor(cmdbuf, {dstTarget, dstOffsets, srcTarget, srcOffsets, vkfilter, 3});
+    }
+
+    if (!mContext.currentCommands) {
+        flushWorkCommandBuffer(mContext);
     }
 }
 
@@ -1588,6 +1624,8 @@ void VulkanDriver::draw(PipelineState pipelineState, Handle<HwRenderPrimitive> r
     // where "SamplerBinding" is the integer in the GLSL, and SamplerGroupBinding is the abstract
     // Filament concept used to form groups of samplers.
 
+    VkDescriptorImageInfo samplers[VulkanBinder::SAMPLER_BINDING_COUNT] = {};
+
     for (uint8_t samplerGroupIdx = 0; samplerGroupIdx < Program::SAMPLER_BINDING_COUNT; samplerGroupIdx++) {
         const auto& samplerGroup = program->samplerGroupInfo[samplerGroupIdx];
         if (samplerGroup.empty()) {
@@ -1598,7 +1636,7 @@ void VulkanDriver::draw(PipelineState pipelineState, Handle<HwRenderPrimitive> r
             continue;
         }
         SamplerGroup* sb = vksb->sb.get();
-        assert(sb->getSize() == samplerGroup.size());
+        assert_invariant(sb->getSize() == samplerGroup.size());
         size_t samplerIdx = 0;
         for (const auto& sampler : samplerGroup) {
             size_t bindingPoint = sampler.binding;
@@ -1628,13 +1666,15 @@ void VulkanDriver::draw(PipelineState pipelineState, Handle<HwRenderPrimitive> r
             const SamplerParams& samplerParams = boundSampler->s;
             VkSampler vksampler = mSamplerCache.getSampler(samplerParams);
 
-            mBinder.bindSampler(bindingPoint, {
+            samplers[bindingPoint] = {
                 .sampler = vksampler,
-                .imageView = texture->imageView,
+                .imageView = texture->getPrimaryImageView(),
                 .imageLayout = getTextureLayout(texture->usage)
-            });
+            };
         }
     }
+
+    mBinder.bindSamplers(samplers);
 
     // Set scissoring.
     // Compute the intersection of the requested scissor rectangle with the current viewport.
@@ -1709,7 +1749,7 @@ void VulkanDriver::endTimerQuery(Handle<HwTimerQuery> tqh) {
 void VulkanDriver::refreshSwapChain() {
     VulkanSurfaceContext& surface = *mContext.currentSurface;
 
-    assert(!surface.headlessQueue && "Resizing headless swap chains is not supported.");
+    assert_invariant(!surface.headlessQueue && "Resizing headless swap chains is not supported.");
     backend::destroySwapChain(mContext, surface, mDisposer);
     createSwapChain(mContext, surface);
 
@@ -1730,10 +1770,10 @@ void VulkanDriver::debugCommand(const char* methodName) {
     static bool inRenderPass = false; // for debug only
     const utils::StaticString command = utils::StaticString::make(methodName, strlen(methodName));
     if (command == BEGIN_COMMAND) {
-        assert(!inRenderPass);
+        assert_invariant(!inRenderPass);
         inRenderPass = true;
     } else if (command == END_COMMAND) {
-        assert(inRenderPass);
+        assert_invariant(inRenderPass);
         inRenderPass = false;
     } else if (inRenderPass && OUTSIDE_COMMANDS.find(command) != OUTSIDE_COMMANDS.end()) {
         utils::slog.e << command.c_str() << " issued inside a render pass." << utils::io::endl;

@@ -64,6 +64,22 @@
 #    define UTILS_PRIVATE
 #endif
 
+#define UTILS_NO_SANITIZE_THREAD
+#if defined(__has_feature)
+#    if __has_feature(thread_sanitizer)
+#        undef UTILS_NO_SANITIZE_THREAD
+#        define UTILS_NO_SANITIZE_THREAD __attribute__((no_sanitize("thread")))
+#    endif
+#endif
+
+#define UTILS_HAS_SANITIZE_MEMORY 0
+#if defined(__has_feature)
+#    if __has_feature(memory_sanitizer)
+#        undef UTILS_HAS_SANITIZE_MEMORY
+#        define UTILS_HAS_SANITIZE_MEMORY 1
+#    endif
+#endif
+
 /*
  * helps the compiler's optimizer predicting branches
  */

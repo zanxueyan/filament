@@ -68,7 +68,7 @@ static MaterialParser* createParser(Backend backend, const void* data, size_t si
     ASSERT_PRECONDITION(version == MATERIAL_VERSION, "Material version mismatch. Expected %d but "
             "received %d.", MATERIAL_VERSION, version);
 
-    assert(backend != Backend::DEFAULT && "Default backend has not been resolved.");
+    assert_invariant(backend != Backend::DEFAULT && "Default backend has not been resolved.");
 
     return materialParser;
 }
@@ -150,7 +150,7 @@ static void addSamplerGroup(Program& pb, uint8_t bindingPoint, SamplerInterfaceB
                             list[i].name.c_str()));
             uint8_t binding = 0;
             UTILS_UNUSED bool ok = map.getSamplerBinding(bindingPoint, (uint8_t)i, &binding);
-            assert(ok);
+            assert_invariant(ok);
             const bool strict = (bindingPoint == filament::BindingPoints::PER_MATERIAL_INSTANCE);
             samplers[i] = { std::move(uniformName), binding, strict };
         }
@@ -166,13 +166,18 @@ FMaterial::FMaterial(FEngine& engine, const Material::Builder& builder)
     mMaterialParser = parser;
 
     UTILS_UNUSED_IN_RELEASE bool nameOk = parser->getName(&mName);
-    assert(nameOk);
+    assert_invariant(nameOk);
 
     UTILS_UNUSED_IN_RELEASE bool sibOK = parser->getSIB(&mSamplerInterfaceBlock);
-    assert(sibOK);
+    assert_invariant(sibOK);
 
     UTILS_UNUSED_IN_RELEASE bool uibOK = parser->getUIB(&mUniformInterfaceBlock);
-    assert(uibOK);
+    assert_invariant(uibOK);
+
+    // Older materials will not have a subpass chunk; this should not be an error.
+    if (!parser->getSubpasses(&mSubpassInfo)) {
+        mSubpassInfo.isValid = false;
+    }
 
     // Populate sampler bindings for the backend that will consume this Material.
     mSamplerBindings.populate(&mSamplerInterfaceBlock);
@@ -321,10 +326,9 @@ FMaterialInstance* FMaterial::createInstance(const char* name) const noexcept {
 }
 
 bool FMaterial::hasParameter(const char* name) const noexcept {
-    if (!mUniformInterfaceBlock.hasUniform(name)) {
-        return mSamplerInterfaceBlock.hasSampler(name);
-    }
-    return true;
+    return mUniformInterfaceBlock.hasUniform(name) ||
+            mSamplerInterfaceBlock.hasSampler(name) ||
+            mSubpassInfo.name == utils::CString(name);
 }
 
 bool FMaterial::isSampler(const char* name) const noexcept {
@@ -354,9 +358,9 @@ Handle<HwProgram> FMaterial::getSurfaceProgramSlow(uint8_t variantKey)
     const noexcept {
     // filterVariant() has already been applied in generateCommands(), shouldn't be needed here
     // if we're unlit, we don't have any bits that correspond to lit materials
-    assert( variantKey == Variant::filterVariant(variantKey, isVariantLit()) );
+    assert_invariant( variantKey == Variant::filterVariant(variantKey, isVariantLit()) );
 
-    assert(!Variant::isReserved(variantKey));
+    assert_invariant(!Variant::isReserved(variantKey));
 
     uint8_t vertexVariantKey = Variant::filterVariantVertex(variantKey);
     uint8_t fragmentVariantKey = Variant::filterVariantFragment(variantKey);
@@ -438,7 +442,7 @@ Program FMaterial::getProgramBuilderWithVariants(
 Handle<HwProgram> FMaterial::createAndCacheProgram(Program&& p,
         uint8_t variantKey) const noexcept {
     auto program = mEngine.getDriverApi().createProgram(std::move(p));
-    assert(program);
+    assert_invariant(program);
 
     mCachedPrograms[variantKey] = program;
     return program;
@@ -455,20 +459,34 @@ size_t FMaterial::getParameters(ParameterInfo* parameters, size_t count) const n
         const auto& uniformInfo = uniforms[i];
         info.name = uniformInfo.name.c_str();
         info.isSampler = false;
+        info.isSubpass = false;
         info.type = uniformInfo.type;
         info.count = uniformInfo.size;
         info.precision = uniformInfo.precision;
     }
 
     const auto& samplers = mSamplerInterfaceBlock.getSamplerInfoList();
-    for (size_t j = 0; i < count; i++, j++) {
+    size_t samplerCount = samplers.size();
+    for (size_t j = 0; i < count && j < samplerCount; i++, j++) {
         ParameterInfo& info = parameters[i];
         const auto& samplerInfo = samplers[j];
         info.name = samplerInfo.name.c_str();
         info.isSampler = true;
+        info.isSubpass = false;
         info.samplerType = samplerInfo.type;
         info.count = 1;
         info.precision = samplerInfo.precision;
+    }
+
+    if (mSubpassInfo.isValid && i < count) {
+        ParameterInfo& info = parameters[i];
+        info.name = mSubpassInfo.name.c_str();
+        info.isSampler = false;
+        info.isSubpass = true;
+        info.subpassType = mSubpassInfo.type;
+        info.count = 1;
+        info.precision = mSubpassInfo.precision;
+        i++;
     }
 
     return count;

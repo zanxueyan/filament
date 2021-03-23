@@ -117,7 +117,8 @@ public class ColorGrading {
         DISPLAY_RANGE,
     }
 
-    ColorGrading(long colorGrading) {
+    // NOTE: This constructor is public only so that filament-utils can use it.
+    public ColorGrading(long colorGrading) {
         mNativeObject = colorGrading;
     }
 
@@ -270,7 +271,7 @@ public class ColorGrading {
          *
          * @return This Builder, for chaining calls
          */
-        Builder shadowsMidtonesHighlights(
+        public Builder shadowsMidtonesHighlights(
                 @NonNull @Size(min = 4) float[] shadows,
                 @NonNull @Size(min = 4) float[] midtones,
                 @NonNull @Size(min = 4) float[] highlights,
@@ -309,7 +310,7 @@ public class ColorGrading {
          *
          * @return This Builder, for chaining calls
          */
-        Builder slopeOffsetPower(
+        public Builder slopeOffsetPower(
                 @NonNull @Size(min = 3) float[] slope,
                 @NonNull @Size(min = 3) float[] offset,
                 @NonNull @Size(min = 3) float[] power) {
@@ -360,7 +361,7 @@ public class ColorGrading {
          *
          * @return This Builder, for chaining calls
          */
-        Builder vibrance(float vibrance) {
+        public Builder vibrance(float vibrance) {
             nBuilderVibrance(mNativeBuilder, vibrance);
             return this;
         }

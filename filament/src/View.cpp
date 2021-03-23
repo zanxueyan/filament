@@ -30,6 +30,7 @@
 
 #include <filament/Exposure.h>
 #include <filament/TextureSampler.h>
+#include <filament/View.h>
 
 #include <private/filament/SibGenerator.h>
 #include <private/filament/UibGenerator.h>
@@ -37,19 +38,19 @@
 #include <utils/Profiler.h>
 #include <utils/Slice.h>
 #include <utils/Systrace.h>
+#include <utils/debug.h>
 
 #include <math/scalar.h>
 #include <math/fast.h>
 
 #include <memory>
-#include <filament/View.h>
 
-using namespace filament::math;
 using namespace utils;
 
 namespace filament {
 
 using namespace backend;
+using namespace math;
 
 FView::FView(FEngine& engine)
     : mFroxelizer(engine),
@@ -227,7 +228,7 @@ void FView::prepareShadowing(FEngine& engine, backend::DriverApi& driver,
     const bool hasDirectionalShadows = directionalLight && lcm.isShadowCaster(directionalLight);
     if (UTILS_UNLIKELY(hasDirectionalShadows)) {
         const auto& shadowOptions = lcm.getShadowOptions(directionalLight);
-        assert(shadowOptions.shadowCascades >= 1 &&
+        assert_invariant(shadowOptions.shadowCascades >= 1 &&
                 shadowOptions.shadowCascades <= CONFIG_MAX_SHADOW_CASCADES);
         mShadowMapManager.setShadowCascades(0, shadowOptions.shadowCascades);
     }
@@ -301,13 +302,16 @@ void FView::prepareLighting(FEngine& engine, FEngine::DriverApi& driver, ArenaSc
     u.setUniform(offsetof(PerViewUib, iblRoughnessOneLevel), iblRoughnessOneLevel);
     u.setUniform(offsetof(PerViewUib, iblLuminance), intensity * exposure);
     u.setUniformArray(offsetof(PerViewUib, iblSH), ibl->getSH(), 9);
-    if (ibl->getReflectionHwHandle()) {
-        mPerViewSb.setSampler(PerViewSib::IBL_SPECULAR, {
-                ibl->getReflectionHwHandle(), {
-                        .filterMag = SamplerMagFilter::LINEAR,
-                        .filterMin = SamplerMinFilter::LINEAR_MIPMAP_LINEAR
-                }});
+
+    // We always sample from the reflection texture, so provide a dummy texture if necessary.
+    backend::Handle<backend::HwTexture> reflection = ibl->getReflectionHwHandle();
+    if (!reflection) {
+        reflection = engine.getDummyCubemap()->getHwHandle();
     }
+    mPerViewSb.setSampler(PerViewSib::IBL_SPECULAR, { reflection, {
+            .filterMag = SamplerMagFilter::LINEAR,
+            .filterMin = SamplerMinFilter::LINEAR_MIPMAP_LINEAR
+    }});
 
     // Directional light (always at index 0)
     auto& lcm = engine.getLightManager();
@@ -497,7 +501,7 @@ void FView::prepare(FEngine& engine, backend::DriverApi& driver, ArenaScope& are
             } else {
                 // TODO: should we shrink the underlying UBO at some point?
             }
-            assert(mRenderableUbh);
+            assert_invariant(mRenderableUbh);
             scene->updateUBOs(merged, mRenderableUbh);
         }
     }
@@ -803,7 +807,7 @@ void FView::prepareVisibleLights(FLightManager const& lcm, utils::JobSystem&,
                     [](auto const& it) {
                         return it.template get<FScene::VISIBILITY>() != 0;
                     });
-    assert(visibleLightCount == size_t(last - lightData.begin()));
+    assert_invariant(visibleLightCount == size_t(last - lightData.begin()));
 
     lightData.resize(visibleLightCount);
 }

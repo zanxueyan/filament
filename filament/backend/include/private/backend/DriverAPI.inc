@@ -291,6 +291,7 @@ DECL_DRIVER_API_SYNCHRONOUS_N(bool, isTextureFormatMipmappable, backend::Texture
 DECL_DRIVER_API_SYNCHRONOUS_N(bool, isRenderTargetFormatSupported, backend::TextureFormat, format)
 DECL_DRIVER_API_SYNCHRONOUS_0(bool, isFrameBufferFetchSupported)
 DECL_DRIVER_API_SYNCHRONOUS_0(bool, isFrameTimeSupported)
+DECL_DRIVER_API_SYNCHRONOUS_0(bool, areFeedbackLoopsSupported)
 DECL_DRIVER_API_SYNCHRONOUS_0(math::float2, getClipSpaceParams)
 DECL_DRIVER_API_SYNCHRONOUS_0(bool, canGenerateMipmaps)
 DECL_DRIVER_API_SYNCHRONOUS_N(void, setupExternalImage, void*, image)
@@ -330,6 +331,11 @@ DECL_DRIVER_API_N(update2DImage,
         uint32_t, width,
         uint32_t, height,
         backend::PixelBufferDescriptor&&, data)
+
+DECL_DRIVER_API_N(setMinMaxLevels,
+        backend::TextureHandle, th,
+        uint32_t, minLevel,
+        uint32_t, maxLevel)
 
 DECL_DRIVER_API_N(update3DImage,
         backend::TextureHandle, th,

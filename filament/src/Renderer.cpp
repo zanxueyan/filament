@@ -31,16 +31,15 @@
 
 #include <backend/PixelBufferDescriptor.h>
 
-#include "fg/FrameGraph.h"
-#include "fg/FrameGraphHandle.h"
-#include "fg/FrameGraphPassResources.h"
+#include "fg2/FrameGraph.h"
+#include "fg2/FrameGraphId.h"
+#include "fg2/FrameGraphResources.h"
 
 #include <utils/compiler.h>
 #include <utils/Panic.h>
 #include <utils/Systrace.h>
 #include <utils/vector.h>
-
-#include <assert.h>
+#include <utils/debug.h>
 
 // this helps visualize what dynamic-scaling is doing
 #define DEBUG_DYNAMIC_SCALING false
@@ -159,7 +158,7 @@ TextureFormat FRenderer::getLdrFormat(bool translucent) const noexcept {
 void FRenderer::render(FView const* view) {
     SYSTRACE_CALL();
 
-    assert(mSwapChain);
+    assert_invariant(mSwapChain);
 
     if (mBeginFrameInternal) {
         mBeginFrameInternal();
@@ -229,9 +228,9 @@ void FRenderer::renderJob(ArenaScope& arena, FView& view) {
     }
 
     FRenderTarget* currentRenderTarget = upcast(view.getRenderTarget());
-    if (mPreviousRenderTarget != currentRenderTarget) {
+    if (mPreviousRenderTargets.find(currentRenderTarget) == mPreviousRenderTargets.end()) {
+        mPreviousRenderTargets.insert(currentRenderTarget);
         initializeClearFlags();
-        mPreviousRenderTarget = currentRenderTarget;
     }
 
     view.prepare(engine, driver, arena, svp, getShaderUserTime());
@@ -286,19 +285,18 @@ void FRenderer::renderJob(ArenaScope& arena, FView& view) {
     mDiscardedFlags &= ~TargetBufferFlags::COLOR;
     mClearFlags &= ~TargetBufferFlags::COLOR;
 
-    const Handle<HwRenderTarget> viewRenderTarget = getRenderTarget(view);
-    FrameGraphRenderTargetHandle fgViewRenderTarget = fg.import<FrameGraphRenderTarget>(
-            "viewRenderTarget", {
+    Handle<HwRenderTarget> viewRenderTarget;
+    TargetBufferFlags attachmentMask;
+    getRenderTarget(view, attachmentMask, viewRenderTarget);
+    FrameGraphId<FrameGraphTexture> fgViewRenderTarget = fg.import("viewRenderTarget",
+            {
+                    .attachments = attachmentMask,
                     .viewport = DEBUG_DYNAMIC_SCALING ? svp : vp,
                     .clearColor = clearColor,
-                    .clearFlags = clearFlags
-            }, {
-                    .target = viewRenderTarget,
-                    .params = {
-                            .flags = { .discardStart = discardedFlags },
-                    }
-            }
-    );
+                    .samples = 0,
+                    .clearFlags = clearFlags,
+                    .discardStart = discardedFlags
+            }, viewRenderTarget);
 
 
     const bool blendModeTranslucent = view.getBlendMode() == View::BlendMode::TRANSLUCENT;
@@ -401,9 +399,6 @@ void FRenderer::renderJob(ArenaScope& arena, FView& view) {
             .height = config.svp.height,
             .format = config.hdrFormat
     };
-    if (colorGradingConfig.asSubpass) {
-        desc.usage |= backend::TextureUsage::SUBPASS_INPUT;
-    }
 
     // a non-drawing pass to prepare everything that need to be before the color passes execute
     fg.addTrivialSideEffectPass("Prepare Color Passes",
@@ -508,7 +503,7 @@ void FRenderer::renderJob(ArenaScope& arena, FView& view) {
     //   as a subpass)
     // The intermediate buffer is accomplished with a "fake" opaqueBlit (i.e. blit) operation.
 
-    const bool outputIsInput = fg.equal(input, colorPassOutput);
+    const bool outputIsInput = input == colorPassOutput;
     if ((outputIsInput && viewRenderTarget == mRenderTarget &&
                     (msaa > 1 || colorGradingConfig.asSubpass)) ||
         (!outputIsInput && blending)) {
@@ -520,12 +515,18 @@ void FRenderer::renderJob(ArenaScope& arena, FView& view) {
         }
     }
 
-    auto output = input;
-    fg.present(output);
-    fg.moveResource(fgViewRenderTarget, output);
+//    auto debug = fg.getBlackboard().get<FrameGraphTexture>("structure");
+//    fg.forwardResource(fgViewRenderTarget, debug ? debug : input);
+
+    fg.forwardResource(fgViewRenderTarget, input);
+
+    fg.present(fgViewRenderTarget);
+
     fg.compile();
+
     //fg.export_graphviz(slog.d, view.getName());
-    fg.execute(engine, driver);
+
+    fg.execute(driver);
 
     // save the current history entry and destroy the oldest entry
     view.commitFrameHistory(engine);
@@ -570,12 +571,6 @@ FrameGraphId<FrameGraphTexture> FRenderer::refractionPass(FrameGraph& fg,
                 .samples = config.msaa,  // we need to conserve the sample buffer
                 .format = config.hdrFormat
         };
-
-        // The opaque pass never uses subpasses, but the transparent pass might.
-        // Therefore we need to set up the usage flag here, before the color texture is created.
-        if (colorGradingConfig.asSubpass) {
-            desc.usage |= backend::TextureUsage::SUBPASS_INPUT;
-        }
 
         input = colorPass(fg, "Color Pass (opaque)", desc, config,
                 { .asSubpass = false }, opaquePass, view);
@@ -676,7 +671,6 @@ FrameGraphId<FrameGraphTexture> FRenderer::colorPass(FrameGraph& fg, const char*
         FrameGraphId<FrameGraphTexture> ssao;
         FrameGraphId<FrameGraphTexture> ssr;
         FrameGraphId<FrameGraphTexture> structure;
-        FrameGraphRenderTargetHandle rt{};
         float4 clearColor{};
     };
 
@@ -693,26 +687,26 @@ FrameGraphId<FrameGraphTexture> FRenderer::colorPass(FrameGraph& fg, const char*
                 data.ssao = blackboard.get<FrameGraphTexture>("ssao");
                 data.color = blackboard.get<FrameGraphTexture>("color");
                 data.depth = blackboard.get<FrameGraphTexture>("depth");
-                data.structure = blackboard.get<FrameGraphTexture>("structure");
 
                 if (config.hasContactShadows) {
-                    assert(data.structure.isValid());
+                    data.structure = blackboard.get<FrameGraphTexture>("structure");
+                    assert_invariant(data.structure);
                     data.structure = builder.sample(data.structure);
                 }
 
-                if (data.shadows.isValid()) {
+                if (data.shadows) {
                     data.shadows = builder.sample(data.shadows);
                 }
 
-                if (data.ssr.isValid()) {
+                if (data.ssr) {
                     data.ssr = builder.sample(data.ssr);
                 }
 
-                if (data.ssao.isValid()) {
+                if (data.ssao) {
                     data.ssao = builder.sample(data.ssao);
                 }
 
-                if (!data.color.isValid()) {
+                if (!data.color) {
                     // we're allocating a new buffer, so its content is undefined and we might need
                     // to clear it.
 
@@ -730,7 +724,7 @@ FrameGraphId<FrameGraphTexture> FRenderer::colorPass(FrameGraph& fg, const char*
                     data.color = builder.createTexture("Color Buffer", colorBufferDesc);
                 }
 
-                if (!data.depth.isValid()) {
+                if (!data.depth) {
                     // clear newly allocated depth buffers, regardless of given clear flags
                     clearDepthFlags = TargetBufferFlags::DEPTH;
                     data.depth = builder.createTexture("Depth Buffer", {
@@ -753,41 +747,42 @@ FrameGraphId<FrameGraphTexture> FRenderer::colorPass(FrameGraph& fg, const char*
                             .height = colorBufferDesc.height,
                             .format = colorGradingConfig.ldrFormat
                     });
-                    data.output = builder.write(data.output);
-                    data.color = builder.read(data.color);
+                    data.color = builder.read(data.color, FrameGraphTexture::Usage::SUBPASS_INPUT);
+                    data.output = builder.write(data.output, FrameGraphTexture::Usage::COLOR_ATTACHMENT);
                 }
 
-                data.color = builder.write(builder.read(data.color));
-                data.depth = builder.write(builder.read(data.depth));
+                // FIXME: do we actually need these reads here? it means "preserve" these attachments
+                data.color = builder.read(data.color, FrameGraphTexture::Usage::COLOR_ATTACHMENT);
+                data.color = builder.write(data.color, FrameGraphTexture::Usage::COLOR_ATTACHMENT);
 
-                blackboard["depth"] = data.depth;
+                data.depth = builder.read(data.depth, FrameGraphTexture::Usage::DEPTH_ATTACHMENT);
+                data.depth = builder.write(data.depth, FrameGraphTexture::Usage::DEPTH_ATTACHMENT);
 
-                data.rt = builder.createRenderTarget("Color Pass Target", {
-                        .attachments = {{ data.color, data.output, {}, {}}, data.depth, {}},
+                builder.declareRenderPass("Color Pass Target", {
+                        .attachments = { .color = { data.color, data.output }, .depth = data.depth },
                         .samples = config.msaa,
                         .clearFlags = clearColorFlags | clearDepthFlags });
+
+                blackboard["depth"] = data.depth;
             },
-            [=, &view](FrameGraphPassResources const& resources,
+            [=, &view](FrameGraphResources const& resources,
                             ColorPassData const& data, DriverApi& driver) {
-                auto out = resources.get(data.rt);
+                auto out = resources.getRenderPassInfo();
 
                 // set samplers and uniforms
                 PostProcessManager& ppm = getEngine().getPostProcessManager();
-                view.prepareSSAO(data.ssao.isValid() ?
+                view.prepareSSAO(data.ssao ?
                         resources.getTexture(data.ssao) : ppm.getOneTexture());
 
                 // set shadow sampler
-                view.prepareShadow(data.shadows.isValid() ?
+                view.prepareShadow(data.shadows ?
                         resources.getTexture(data.shadows) : ppm.getOneTextureArray());
 
-                assert(data.structure.isValid());
-                if (data.structure.isValid()) {
-                    const auto& structure = resources.getTexture(data.structure);
-                    view.prepareStructure(structure ? structure : ppm.getOneTexture());
-                }
+                // set structure sampler
+                view.prepareStructure(data.structure ?
+                        resources.getTexture(data.structure) : ppm.getOneTexture());
 
-                // TODO: check what getTexture() returns
-                if (data.ssr.isValid()) {
+                if (data.ssr) {
                     view.prepareSSR(resources.getTexture(data.ssr), config.refractionLodOffset);
                 }
 
@@ -816,8 +811,7 @@ FrameGraphId<FrameGraphTexture> FRenderer::colorPass(FrameGraph& fg, const char*
     );
 
     // when color grading is done as a subpass, the output of the color-pass is the ldr buffer
-    auto output = colorGradingConfig.asSubpass ?
-            colorPass.getData().output : colorPass.getData().color;
+    auto output = colorGradingConfig.asSubpass ? colorPass->output : colorPass->color;
 
     fg.getBlackboard()["color"] = output;
     return output;
@@ -827,8 +821,8 @@ void FRenderer::copyFrame(FSwapChain* dstSwapChain, filament::Viewport const& ds
         filament::Viewport const& srcViewport, CopyFrameFlag flags) {
     SYSTRACE_CALL();
 
-    assert(mSwapChain);
-    assert(dstSwapChain);
+    assert_invariant(mSwapChain);
+    assert_invariant(dstSwapChain);
     FEngine& engine = getEngine();
     FEngine::DriverApi& driver = engine.getDriverApi();
 
@@ -853,7 +847,7 @@ void FRenderer::copyFrame(FSwapChain* dstSwapChain, filament::Viewport const& ds
     driver.beginRenderPass(mRenderTarget, params);
 
     // Verify that the source swap chain is readable.
-    assert(mSwapChain->isReadable());
+    assert_invariant(mSwapChain->isReadable());
     driver.blit(TargetBufferFlags::COLOR,
             mRenderTarget, dstViewport, mRenderTarget, srcViewport, SamplerMagFilter::LINEAR);
     if (flags & SET_PRESENTATION_TIME) {
@@ -873,7 +867,7 @@ void FRenderer::copyFrame(FSwapChain* dstSwapChain, filament::Viewport const& ds
 
 bool FRenderer::beginFrame(FSwapChain* swapChain, uint64_t vsyncSteadyClockTimeNano,
         backend::FrameScheduledCallback callback, void* user) {
-    assert(swapChain);
+    assert_invariant(swapChain);
 
     SYSTRACE_CALL();
 
@@ -906,7 +900,7 @@ bool FRenderer::beginFrame(FSwapChain* swapChain, uint64_t vsyncSteadyClockTimeN
     mShaderUserTime = { h, l, 0, 0 };
 
     initializeClearFlags();
-    mPreviousRenderTarget = nullptr;
+    mPreviousRenderTargets.clear();
 
     mBeginFrameInternal = {};
 
@@ -1097,9 +1091,14 @@ void FRenderer::readPixels(Handle<HwRenderTarget> renderTargetHandle,
     driver.readPixels(renderTargetHandle, xoffset, yoffset, width, height, std::move(buffer));
 }
 
-Handle<HwRenderTarget> FRenderer::getRenderTarget(FView& view) const noexcept {
-    Handle<HwRenderTarget> viewRenderTarget = view.getRenderTargetHandle();
-    return viewRenderTarget ? viewRenderTarget : mRenderTarget;
+void FRenderer::getRenderTarget(FView const& view,
+        TargetBufferFlags& outAttachementMask, Handle<HwRenderTarget>& outTarget) const noexcept {
+    outTarget = view.getRenderTargetHandle();
+    outAttachementMask = view.getRenderTargetAttachmentMask();
+    if (!outTarget) {
+        outTarget = mRenderTarget;
+        outAttachementMask = TargetBufferFlags::COLOR0 | TargetBufferFlags::DEPTH;
+    }
 }
 
 void FRenderer::initializeClearFlags() {

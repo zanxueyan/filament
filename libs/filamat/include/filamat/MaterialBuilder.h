@@ -38,6 +38,10 @@
 #include <utils/compiler.h>
 #include <utils/CString.h>
 
+namespace utils {
+class JobSystem;
+}
+
 namespace filamat {
 
 struct MaterialInfo;
@@ -107,6 +111,13 @@ protected:
         TargetLanguage targetLanguage;
     };
     std::vector<CodeGenParams> mCodeGenPermutations;
+    // For finding properties and running semantic analysis, we always use the same code gen
+    // permutation. This is the first permutation generated with default arguments passed to matc.
+    const CodeGenParams mSemanticCodeGenParams = {
+        .shaderModel = (int) ShaderModel::GL_ES_30,
+        .targetApi = TargetApi::OPENGL,
+        .targetLanguage = TargetLanguage::SPIRV
+    };
     uint8_t mVariantFilter = 0;
 
     // Keeps track of how many times MaterialBuilder::init() has been called without a call to
@@ -477,9 +488,11 @@ public:
 
     MaterialBuilder& enableFramebufferFetch() noexcept;
 
-
-    //! Build the material.
-    Package build() noexcept;
+    /**
+     * Build the material. If you are using the Filament engine with this library, you should use
+     * the job system provided by Engine.
+     */
+    Package build(utils::JobSystem& jobSystem) noexcept;
 
 public:
     // The methods and types below are for internal use
@@ -598,7 +611,9 @@ private:
     void writeCommonChunks(ChunkContainer& container, MaterialInfo& info) const noexcept;
     void writeSurfaceChunks(ChunkContainer& container) const noexcept;
 
-    bool generateShaders(const std::vector<Variant>& variants, ChunkContainer& container,
+    bool generateShaders(
+            utils::JobSystem& jobSystem,
+            const std::vector<Variant>& variants, ChunkContainer& container,
             const MaterialInfo& info) const noexcept;
 
     bool isLit() const noexcept { return mShading != filament::Shading::UNLIT; }

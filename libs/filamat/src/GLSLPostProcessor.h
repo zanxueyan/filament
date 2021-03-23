@@ -24,6 +24,8 @@
 
 #include "filamat/MaterialBuilder.h"    // for MaterialBuilder:: enums
 
+#include "ShaderMinifier.h"
+
 #include <ShaderLang.h>
 
 #include <spirv-tools/optimizer.hpp>
@@ -36,7 +38,6 @@ using SpirvBlob = std::vector<uint32_t>;
 
 class GLSLPostProcessor {
 public:
-
     enum Flags : uint32_t {
         PRINT_SHADERS = 1 << 0,
         GENERATE_DEBUG_INFO = 1 << 1,
@@ -49,6 +50,7 @@ public:
     struct Config {
         filament::backend::ShaderType shaderType;
         filament::backend::ShaderModel shaderModel;
+        bool hasFramebufferFetch;
         struct {
             std::vector<std::pair<uint32_t, uint32_t>> subpassInputToColorLocation;
         } glsl;
@@ -60,11 +62,19 @@ public:
             std::string* outputMsl);
 
 private:
+    struct InternalConfig {
+        std::string* glslOutput = nullptr;
+        SpirvBlob* spirvOutput = nullptr;
+        std::string* mslOutput = nullptr;
+        EShLanguage shLang = EShLangFragment;
+        int langVersion = 0;
+        ShaderMinifier minifier;
+    };
 
     void fullOptimization(const glslang::TShader& tShader,
-            GLSLPostProcessor::Config const& config) const;
+            GLSLPostProcessor::Config const& config, InternalConfig& internalConfig) const;
     void preprocessOptimization(glslang::TShader& tShader,
-            GLSLPostProcessor::Config const& config) const;
+            GLSLPostProcessor::Config const& config, InternalConfig& internalConfig) const;
 
     /**
      * Retrieve an optimizer instance tuned for the given optimization level and shader configuration.
@@ -78,15 +88,12 @@ private:
     static void registerPerformancePasses(spvtools::Optimizer& optimizer, Config const& config);
 
     void optimizeSpirv(OptimizerPtr optimizer, SpirvBlob& spirv) const;
+    void spirvToToMsl(const SpirvBlob *spirv, std::string *outMsl, const Config &config,
+            ShaderMinifier& minifier) const;
 
     const MaterialBuilder::Optimization mOptimization;
     const bool mPrintShaders;
     const bool mGenerateDebugInfo;
-    std::string* mGlslOutput = nullptr;
-    SpirvBlob* mSpirvOutput = nullptr;
-    std::string* mMslOutput = nullptr;
-    EShLanguage mShLang = EShLangFragment;
-    int mLangVersion = 0;
 };
 
 } // namespace filamat

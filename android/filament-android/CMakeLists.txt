@@ -17,9 +17,9 @@ add_library(utils STATIC IMPORTED)
 set_target_properties(utils PROPERTIES IMPORTED_LOCATION
         ${FILAMENT_DIR}/lib/${ANDROID_ABI}/libutils.a)
 
-add_library(ibl STATIC IMPORTED)
-set_target_properties(ibl PROPERTIES IMPORTED_LOCATION
-        ${FILAMENT_DIR}/lib/${ANDROID_ABI}/libibl.a)
+add_library(ibl-lite STATIC IMPORTED)
+set_target_properties(ibl-lite PROPERTIES IMPORTED_LOCATION
+        ${FILAMENT_DIR}/lib/${ANDROID_ABI}/libibl-lite.a)
 
 add_library(filaflat STATIC IMPORTED)
 set_target_properties(filaflat PROPERTIES IMPORTED_LOCATION
@@ -36,6 +36,10 @@ set_target_properties(filabridge PROPERTIES IMPORTED_LOCATION
 add_library(bluevk STATIC IMPORTED)
 set_target_properties(bluevk PROPERTIES IMPORTED_LOCATION
         ${FILAMENT_DIR}/lib/${ANDROID_ABI}/libbluevk.a)
+
+add_library(vkshaders STATIC IMPORTED)
+set_target_properties(vkshaders PROPERTIES IMPORTED_LOCATION
+        ${FILAMENT_DIR}/lib/${ANDROID_ABI}/libvkshaders.a)
 
 add_library(smol-v STATIC IMPORTED)
 set_target_properties(smol-v PROPERTIES IMPORTED_LOCATION
@@ -92,7 +96,7 @@ target_link_libraries(filament-jni
     PRIVATE filaflat
     PRIVATE filabridge
     PRIVATE geometry
-    PRIVATE ibl
+    PRIVATE ibl-lite
     PRIVATE log
     PRIVATE GLESv3
     PRIVATE EGL
@@ -101,6 +105,7 @@ target_link_libraries(filament-jni
     PRIVATE utils
     $<$<STREQUAL:${FILAMENT_ENABLE_MATDBG},ON>:matdbg>
     $<$<STREQUAL:${FILAMENT_SUPPORTS_VULKAN},ON>:bluevk>
+    $<$<STREQUAL:${FILAMENT_SUPPORTS_VULKAN},ON>:vkshaders>
     $<$<STREQUAL:${FILAMENT_SUPPORTS_VULKAN},ON>:smol-v>
 )
 

@@ -77,7 +77,7 @@ bool VulkanBinder::getOrCreateDescriptors(VkDescriptorSet descriptorSets[3],
     // If no bindings have been dirtied, update the timestamp (most recent access) and return false
     // to indicate there's no need to re-bind.
     if (!mDirtyDescriptor) {
-        assert(mCurrentDescriptorBundle && mCurrentDescriptorBundle->bound);
+        assert_invariant(mCurrentDescriptorBundle && mCurrentDescriptorBundle->bound);
         descriptorSets[0] = mCurrentDescriptorBundle->handles[0];
         descriptorSets[1] = mCurrentDescriptorBundle->handles[1];
         descriptorSets[2] = mCurrentDescriptorBundle->handles[2];
@@ -107,7 +107,7 @@ bool VulkanBinder::getOrCreateDescriptors(VkDescriptorSet descriptorSets[3],
         return true;
     }
 
-    // Allocate one descriptor set for each type: uniforms, samplers, and input attachments.
+    // Allocate one descriptor set for each type: uniforms, combined image samplers, and input attachments.
     VkDescriptorSetAllocateInfo allocInfo = {};
     allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
     allocInfo.descriptorPool = mDescriptorPool;
@@ -196,12 +196,12 @@ bool VulkanBinder::getOrCreatePipeline(VkPipeline* pipeline) noexcept {
     // If no bindings have been dirtied, update the timestamp (most recent access) and return false
     // to indicate there's no need to re-bind.
     if (!mDirtyPipeline) {
-        assert(mCurrentPipeline && mCurrentPipeline->bound);
+        assert_invariant(mCurrentPipeline && mCurrentPipeline->bound);
         *pipeline = mCurrentPipeline->handle;
         mCurrentPipeline->timestamp = mCurrentTime;
         return false;
     }
-    assert(mPipelineKey.shaders[0] && "Vertex shader is not bound.");
+    assert_invariant(mPipelineKey.shaders[0] && "Vertex shader is not bound.");
 
     // Release the previously bound pipeline and update its time stamp.
     if (mCurrentPipeline) {
@@ -480,18 +480,16 @@ void VulkanBinder::bindUniformBuffer(uint32_t bindingIndex, VkBuffer uniformBuff
     }
 }
 
-void VulkanBinder::bindSampler(uint32_t bindingIndex, VkDescriptorImageInfo samplerInfo) noexcept {
-    assert(bindingIndex < SAMPLER_BINDING_COUNT);
-    if (bindingIndex >= SAMPLER_BINDING_COUNT) {
-        utils::slog.w << "Sampler bindings overflow: " << bindingIndex << " / "
-                << SAMPLER_BINDING_COUNT << utils::io::endl;
-        return;
-    }
-    VkDescriptorImageInfo& imageInfo = mDescriptorKey.samplers[bindingIndex];
-    if (imageInfo.sampler != samplerInfo.sampler || imageInfo.imageView != samplerInfo.imageView ||
-        imageInfo.imageLayout != samplerInfo.imageLayout) {
-        imageInfo = samplerInfo;
-        mDirtyDescriptor = true;
+void VulkanBinder::bindSamplers(VkDescriptorImageInfo samplers[SAMPLER_BINDING_COUNT]) noexcept {
+    for (uint32_t bindingIndex = 0; bindingIndex < SAMPLER_BINDING_COUNT; bindingIndex++) {
+        const VkDescriptorImageInfo& requested = samplers[bindingIndex];
+        VkDescriptorImageInfo& existing = mDescriptorKey.samplers[bindingIndex];
+        if (existing.sampler != requested.sampler ||
+            existing.imageView != requested.imageView ||
+            existing.imageLayout != requested.imageLayout) {
+            existing = requested;
+            mDirtyDescriptor = true;
+        }
     }
 }
 

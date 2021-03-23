@@ -8,8 +8,8 @@
 #
 # The default is release
 
-NDK_VERSION="ndk;21.3.6528147"
-ANDROID_NDK_VERSION=21
+NDK_VERSION="ndk;22.0.7026061"
+ANDROID_NDK_VERSION=22
 
 # Exclude Vulkan from CI builds for Android. (It is enabled for other platforms.)
 EXCLUDE_VULKAN=-v
@@ -49,6 +49,11 @@ elif [[ "$LC_UNAME" == "darwin" ]]; then
     source `dirname $0`/../mac/ci-common.sh
 fi
 source `dirname $0`/../common/build-common.sh
+
+# For continuous builds, do not exclude Vulkan.
+if [[ "$TARGET" == "continuous" ]]; then
+    EXCLUDE_VULKAN=
+fi
 
 # Only update and install the NDK if necessary, as this can be slow
 ndk_side_by_side="${ANDROID_HOME}/ndk/"

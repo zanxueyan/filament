@@ -46,6 +46,14 @@
 
 #include <vector>
 
+#ifdef NDEBUG
+#define GLTFIO_VERBOSE 0
+#define GLTFIO_WARN(msg)
+#else
+#define GLTFIO_VERBOSE 1
+#define GLTFIO_WARN(msg) slog.w << msg << io::endl
+#endif
+
 namespace utils {
     class NameComponentManager;
     class EntityManager;
@@ -86,6 +94,7 @@ struct Primitive {
     filament::VertexBuffer* vertices = nullptr;
     filament::IndexBuffer* indices = nullptr;
     filament::Aabb aabb; // object-space bounding box
+    UvMap uvmap; // small mapping from each glTF UV set to either UV0 or UV1
 };
 using MeshCache = tsl::robin_map<const cgltf_mesh*, std::vector<Primitive>>;
 
@@ -104,8 +113,10 @@ using MatInstanceCache = tsl::robin_map<intptr_t, MaterialEntry>;
 
 struct FFilamentAsset : public FilamentAsset {
     FFilamentAsset(filament::Engine* engine, utils::NameComponentManager* names,
-            utils::EntityManager* entityManager) :
-            mEngine(engine), mNameManager(names), mEntityManager(entityManager) {}
+            utils::EntityManager* entityManager, const cgltf_data* srcAsset) :
+            mEngine(engine), mNameManager(names), mEntityManager(entityManager) {
+        mSourceAsset.reset(new SourceAsset {(cgltf_data*)srcAsset});
+    }
 
     ~FFilamentAsset();
 
@@ -185,8 +196,8 @@ struct FFilamentAsset : public FilamentAsset {
 
     void releaseSourceData() noexcept;
 
-    const void* getSourceAsset() noexcept {
-        return mSourceAsset;
+    const void* getSourceAsset() const noexcept {
+        return mSourceAsset.get() ? mSourceAsset->hierarchy : nullptr;
     }
 
     FilamentInstance** getAssetInstances() noexcept {
@@ -196,12 +207,6 @@ struct FFilamentAsset : public FilamentAsset {
     size_t getAssetInstanceCount() const noexcept {
         return mInstances.size();
     }
-
-    void acquireSourceAsset() {
-        ++mSourceAssetRefCount;
-    }
-
-    void releaseSourceAsset();
 
     void takeOwnership(filament::Texture* texture) {
         mTextures.push_back(texture);
@@ -219,7 +224,6 @@ struct FFilamentAsset : public FilamentAsset {
     filament::Engine* mEngine;
     utils::NameComponentManager* mNameManager;
     utils::EntityManager* mEntityManager;
-    std::vector<uint8_t> mGlbData;
     std::vector<utils::Entity> mEntities;
     std::vector<utils::Entity> mLightEntities;
     std::vector<utils::Entity> mCameraEntities;
@@ -233,27 +237,37 @@ struct FFilamentAsset : public FilamentAsset {
     SkinVector mSkins; // unused for instanced assets
     Animator* mAnimator = nullptr;
     Wireframe* mWireframe = nullptr;
-    int mSourceAssetRefCount = 0;
     bool mResourcesLoaded = false;
-    bool mSharedSourceAsset = false;
     DependencyGraph mDependencyGraph;
-    DracoCache mDracoCache;
     tsl::htrie_map<char, std::vector<utils::Entity>> mNameToEntity;
 
     // Sentinels for situations where ResourceLoader needs to generate data.
     const cgltf_accessor mGenerateNormals = {};
     const cgltf_accessor mGenerateTangents = {};
 
+    // Encapsulates reference-counted source data, which includes the cgltf hierachy
+    // and potentially also includes buffer data that can be uploaded to the GPU.
+    struct SourceAsset {
+        ~SourceAsset() { cgltf_free(hierarchy); }
+        cgltf_data* hierarchy;
+        DracoCache dracoCache;
+        std::vector<uint8_t> glbData;
+    };
+
+    // We used shared ownership for the raw cgltf data in order to permit ResourceLoader to
+    // complete various asynchronous work (e.g. uploading buffers to the GPU) even after the asset
+    // or ResourceLoader have been destroyed.
+    using SourceHandle = std::shared_ptr<SourceAsset>;
+    SourceHandle mSourceAsset;
+
     // Transient source data that can freed via releaseSourceData:
     std::vector<BufferSlot> mBufferSlots;
     std::vector<TextureSlot> mTextureSlots;
     std::vector<const char*> mResourceUris;
-    const cgltf_data* mSourceAsset = nullptr;
     NodeMap mNodeMap; // unused for instanced assets
     std::vector<std::pair<const cgltf_primitive*, filament::VertexBuffer*> > mPrimitives;
     MatInstanceCache mMatInstanceCache;
     MeshCache mMeshCache;
-    bool mIsReleased = false;
 };
 
 FILAMENT_UPCAST(FilamentAsset)

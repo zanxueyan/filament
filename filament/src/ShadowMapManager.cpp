@@ -23,6 +23,8 @@
 
 #include <private/filament/SibGenerator.h>
 
+#include <utils/debug.h>
+
 namespace filament {
 
 using namespace backend;
@@ -61,7 +63,7 @@ void ShadowMapManager::reset() noexcept {
 }
 
 void ShadowMapManager::setShadowCascades(size_t lightIndex, size_t cascades) noexcept {
-    assert(cascades <= CONFIG_MAX_SHADOW_CASCADES);
+    assert_invariant(cascades <= CONFIG_MAX_SHADOW_CASCADES);
     for (size_t c = 0; c < cascades; c++) {
         mCascadeShadowMaps.emplace_back(mCascadeShadowMapCache[c].get(), lightIndex);
     }
@@ -69,7 +71,7 @@ void ShadowMapManager::setShadowCascades(size_t lightIndex, size_t cascades) noe
 
 void ShadowMapManager::addSpotShadowMap(size_t lightIndex) noexcept {
     const size_t maps = mSpotShadowMaps.size();
-    assert(maps < CONFIG_MAX_SHADOW_CASTING_SPOTS);
+    assert_invariant(maps < CONFIG_MAX_SHADOW_CASTING_SPOTS);
     mSpotShadowMaps.emplace_back(mSpotShadowMapCache[maps].get(), lightIndex);
 }
 
@@ -80,7 +82,7 @@ void ShadowMapManager::render(FrameGraph& fg, FEngine& engine, FView& view,
     struct ShadowPassData {
         FrameGraphId<FrameGraphTexture> shadows;
         FrameGraphId<FrameGraphTexture> tempDepth;
-        FrameGraphRenderTargetHandle rt[MAX_SHADOW_LAYERS];
+        uint32_t rt[MAX_SHADOW_LAYERS];
     };
 
     using ShadowPass = std::pair<const ShadowMapEntry*, RenderPass>;
@@ -88,7 +90,7 @@ void ShadowMapManager::render(FrameGraph& fg, FEngine& engine, FView& view,
     passes.reserve(MAX_SHADOW_LAYERS);
     uint8_t layerSampleCount[MAX_SHADOW_LAYERS] = {};
 
-    assert(mTextureRequirements.layers <= MAX_SHADOW_LAYERS);
+    assert_invariant(mTextureRequirements.layers <= MAX_SHADOW_LAYERS);
 
     // These loops fill render passes with appropriate rendering commands for each shadow map.
     // The actual render pass execution is deferred to the frame graph.
@@ -99,11 +101,11 @@ void ShadowMapManager::render(FrameGraph& fg, FEngine& engine, FView& view,
 
         map.getShadowMap()->render(driver, view.getVisibleDirectionalShadowCasters(), pass, view);
 
-        assert(map.getLayout().layer < mTextureRequirements.layers);
+        assert_invariant(map.getLayout().layer < mTextureRequirements.layers);
         passes.emplace_back(&map, pass);
 
         const uint8_t layer = map.getLayout().layer;
-        assert(layer < MAX_SHADOW_LAYERS);
+        assert_invariant(layer < MAX_SHADOW_LAYERS);
         layerSampleCount[layer] = map.getLayout().vsmSamples;
     }
     for (size_t i = 0; i < mSpotShadowMaps.size(); i++) {
@@ -116,14 +118,14 @@ void ShadowMapManager::render(FrameGraph& fg, FEngine& engine, FView& view,
         map.getShadowMap()->render(driver, view.getVisibleSpotShadowCasters(), pass, view);
         pass.clearVisibilityMask();
 
-        assert(map.getLayout().layer < mTextureRequirements.layers);
+        assert_invariant(map.getLayout().layer < mTextureRequirements.layers);
         passes.emplace_back(&map, pass);
 
         const uint8_t layer = map.getLayout().layer;
-        assert(layer < MAX_SHADOW_LAYERS);
+        assert_invariant(layer < MAX_SHADOW_LAYERS);
         layerSampleCount[layer] = map.getLayout().vsmSamples;
     }
-    assert(passes.size() <= mTextureRequirements.layers);
+    assert_invariant(passes.size() <= mTextureRequirements.layers);
 
     const bool fillWithCheckerboard = engine.debug.shadowmap.checkerboard && !view.hasVsm();
 
@@ -134,20 +136,15 @@ void ShadowMapManager::render(FrameGraph& fg, FEngine& engine, FView& view,
                     .depth = mTextureRequirements.layers,
                     .levels = mTextureRequirements.levels,
                     .type = SamplerType::SAMPLER_2D_ARRAY,
-                    .format = mTextureFormat,
-                    .usage = TextureUsage::DEPTH_ATTACHMENT | TextureUsage::SAMPLEABLE
-                        | (fillWithCheckerboard ? TextureUsage::UPLOADABLE : (TextureUsage) 0)
+                    .format = mTextureFormat
                 };
 
                 if (view.hasVsm()) {
                     // TODO: support 16-bit VSM depth textures.
                     shadowTextureDesc.format = TextureFormat::RG32F;
-                    shadowTextureDesc.usage = TextureUsage::COLOR_ATTACHMENT |
-                            TextureUsage::SAMPLEABLE;
                 }
 
                 data.shadows = builder.createTexture("Shadow Texture", shadowTextureDesc);
-                data.shadows = builder.write(data.shadows);
 
                 if (view.hasVsm()) {
                     // When rendering VSM shadow maps, we still need a depth texture for correct
@@ -162,30 +159,33 @@ void ShadowMapManager::render(FrameGraph& fg, FEngine& engine, FView& view,
                         .samples = 1,
                         .type = SamplerType::SAMPLER_2D,
                         .format = TextureFormat::DEPTH16,
-                        .usage = TextureUsage::DEPTH_ATTACHMENT
                     });
                     // We specify "read" for the temporary shadow texture, so it isn't culled.
-                    data.tempDepth = builder.write(builder.read(data.tempDepth));
+//                    data.tempDepth = builder.read(data.tempDepth, FrameGraphTexture::Usage::DEPTH_ATTACHMENT);
                 }
 
                 // Create a render target for each layer of the texture array.
                 for (uint8_t i = 0u; i < mTextureRequirements.layers; i++) {
-                    FrameGraphRenderTarget::Descriptor renderTargetDesc {};
+                    FrameGraphRenderPass::Descriptor renderTargetDesc {};
                     if (view.hasVsm()) {
-                        renderTargetDesc.attachments = { { data.shadows, 0u, i }, { data.tempDepth } };
-                        renderTargetDesc.clearFlags = TargetBufferFlags::COLOR |
-                            TargetBufferFlags::DEPTH;
+                        auto attachment = builder.createSubresource(data.shadows, "Shadow Texture Mip", { .layer = i });
+                        attachment = builder.write(attachment, FrameGraphTexture::Usage::COLOR_ATTACHMENT);
+                        data.tempDepth = builder.write(data.tempDepth, FrameGraphTexture::Usage::DEPTH_ATTACHMENT);
+                        renderTargetDesc.attachments = { .color = { attachment }, .depth = data.tempDepth };
+                        renderTargetDesc.clearFlags = TargetBufferFlags::COLOR | TargetBufferFlags::DEPTH;
                         renderTargetDesc.clearColor = { 1.0f, 1.0f, 0.0f, 0.0f };
                         renderTargetDesc.samples = layerSampleCount[i];
                     } else {
-                        renderTargetDesc.attachments = { {}, { data.shadows, 0u, i } };
+                        auto attachment = builder.createSubresource(data.shadows, "Shadow Texture Mip", { .layer = i });
+                        attachment = builder.write(attachment, FrameGraphTexture::Usage::DEPTH_ATTACHMENT);
+                        renderTargetDesc.attachments = { .depth = attachment };
                         renderTargetDesc.clearFlags = TargetBufferFlags::DEPTH;
                     }
 
-                    data.rt[i] = builder.createRenderTarget("Shadow RT", renderTargetDesc);
+                    data.rt[i] = builder.declareRenderPass("Shadow RT", renderTargetDesc);
                 }
             },
-            [=, passes = std::move(passes), &view, &engine](FrameGraphPassResources const& resources,
+            [=, passes = std::move(passes), &view, &engine](FrameGraphResources const& resources,
                     auto const& data, DriverApi& driver) mutable {
                 for (auto& [map, pass] : passes) {
                     FCamera const& camera = map->getShadowMap()->getCamera();
@@ -208,7 +208,7 @@ void ShadowMapManager::render(FrameGraph& fg, FEngine& engine, FView& view,
                     view.commitUniforms(driver);
 
                     const auto layer = map->getLayout().layer;
-                    auto rt = resources.get(data.rt[layer]);
+                    auto rt = resources.getRenderPassInfo(data.rt[layer]);
                     rt.params.viewport = viewport;
 
                     auto polygonOffset = map->getShadowMap()->getPolygonOffset();
@@ -229,10 +229,11 @@ void ShadowMapManager::render(FrameGraph& fg, FEngine& engine, FView& view,
 
         auto& debugPatternPass = fg.addPass<DebugPatternData>("Shadow Debug Pattern Pass",
                 [&](FrameGraph::Builder& builder, DebugPatternData& data) {
-                    assert(shadows.isValid());
-                    data.shadows = builder.write(shadows);
+                    assert_invariant(shadows);
+                    data.shadows = builder.write(shadows,
+                            FrameGraphTexture::Usage::UPLOADABLE);
                 },
-                [=](FrameGraphPassResources const& resources, DebugPatternData const& data,
+                [=](FrameGraphResources const& resources, DebugPatternData const& data,
                     DriverApi& driver) {
                     fillWithDebugPattern(driver, resources.getTexture(data.shadows),
                             mTextureRequirements.size);
@@ -247,7 +248,8 @@ void ShadowMapManager::render(FrameGraph& fg, FEngine& engine, FView& view,
         auto& ppm = engine.getPostProcessManager();
         for (uint8_t layer = 0; layer < mTextureRequirements.layers; layer++) {
             for (size_t level = 0; level < mTextureRequirements.levels - 1; level++) {
-                shadows = ppm.vsmMipmapPass(fg, shadows, layer, level);
+                const bool finalize = mTextureRequirements.levels - 2;
+                shadows = ppm.vsmMipmapPass(fg, shadows, layer, level, finalize);
             }
         }
     }
@@ -379,7 +381,7 @@ ShadowMapManager::ShadowTechnique ShadowMapManager::updateCascadeShadowMaps(
         // Compute the frustum for the directional light.
         ShadowMap& shadowMap = *entry.getShadowMap();
         UTILS_UNUSED_IN_RELEASE size_t l = entry.getLightIndex();
-        assert(l == 0);
+        assert_invariant(l == 0);
 
         const size_t textureDimension = entry.getLayout().size;
         const ShadowMap::ShadowMapLayout layout{

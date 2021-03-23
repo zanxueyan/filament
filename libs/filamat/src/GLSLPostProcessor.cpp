@@ -41,6 +41,11 @@ GLSLPostProcessor::GLSLPostProcessor(MaterialBuilder::Optimization optimization,
         : mOptimization(optimization),
           mPrintShaders(flags & PRINT_SHADERS),
           mGenerateDebugInfo(flags & GENERATE_DEBUG_INFO) {
+    // SPIRV error handler registration needs to occur only once. To avoid a race we do it up here
+    // in the constructor, which gets invoked before MaterialBuilder kicks off jobs.
+    spv::spirvbin_t::registerErrorHandler([](const std::string& str) {
+        utils::slog.e << str << utils::io::endl;
+    });
 }
 
 GLSLPostProcessor::~GLSLPostProcessor() {
@@ -54,10 +59,6 @@ static uint32_t shaderVersionFromModel(filament::backend::ShaderModel model) {
         case filament::backend::ShaderModel::GL_CORE_41:
             return 410;
     }
-}
-
-static void errorHandler(const std::string& str) {
-    utils::slog.e << str << utils::io::endl;
 }
 
 static bool filterSpvOptimizerMessage(spv_message_level_t level) {
@@ -106,42 +107,9 @@ static std::string stringifySpvOptimizerMessage(spv_message_level_t level, const
     return oss.str();
 }
 
-/**
- * Shrinks the specified string and returns a new string as the result.
- * To shrink the string, this method performs the following transforms:
- * - Remove leading white spaces at the beginning of each line
- * - Remove empty lines
- */
-static std::string shrinkString(const std::string& s) {
-    size_t cur = 0;
+void GLSLPostProcessor::spirvToToMsl(const SpirvBlob *spirv, std::string *outMsl,
+        const Config &config, ShaderMinifier& minifier) const {
 
-    std::string r;
-    r.reserve(s.length());
-
-    while (cur < s.length()) {
-        size_t pos = cur;
-        size_t len = 0;
-
-        while (s[cur] != '\n') {
-            cur++;
-            len++;
-        }
-
-        size_t newPos = s.find_first_not_of(" \t", pos);
-        if (newPos == std::string::npos) newPos = pos;
-
-        r.append(s, newPos, len - (newPos - pos));
-        r += '\n';
-
-        while (s[cur] == '\n') {
-            cur++;
-        }
-    }
-
-    return r;
-}
-
-void SpvToMsl(const SpirvBlob* spirv, std::string* outMsl, const GLSLPostProcessor::Config& config) {
     CompilerMSL mslCompiler(*spirv);
     CompilerGLSL::Options options;
     mslCompiler.set_common_options(options);
@@ -184,15 +152,18 @@ void SpvToMsl(const SpirvBlob* spirv, std::string* outMsl, const GLSLPostProcess
     }
 
     *outMsl = mslCompiler.compile();
-    *outMsl = shrinkString(*outMsl);
+    *outMsl = minifier.removeWhitespace(*outMsl);
 }
 
 bool GLSLPostProcessor::process(const std::string& inputShader, Config const& config,
         std::string* outputGlsl, SpirvBlob* outputSpirv, std::string* outputMsl) {
 
     // If TargetApi is Vulkan, then we need post-processing even if there's no optimization.
+    // If we're using framebuffer fetch, we also need to force our compilation target to Vulkan, as
+    // it is only supported in GLSL for Vulkan.
     using TargetApi = MaterialBuilder::TargetApi;
-    const TargetApi targetApi = outputSpirv ? TargetApi::VULKAN : TargetApi::OPENGL;
+    const TargetApi targetApi = (outputSpirv || config.hasFramebufferFetch) ? TargetApi::VULKAN :
+        TargetApi::OPENGL;
     if (targetApi == TargetApi::OPENGL && mOptimization == MaterialBuilder::Optimization::NONE) {
         *outputGlsl = inputShader;
         if (mPrintShaders) {
@@ -201,18 +172,20 @@ bool GLSLPostProcessor::process(const std::string& inputShader, Config const& co
         return true;
     }
 
-    mGlslOutput = outputGlsl;
-    mSpirvOutput = outputSpirv;
-    mMslOutput = outputMsl;
+    InternalConfig internalConfig;
+
+    internalConfig.glslOutput = outputGlsl;
+    internalConfig.spirvOutput = outputSpirv;
+    internalConfig.mslOutput = outputMsl;
 
     if (config.shaderType == filament::backend::VERTEX) {
-        mShLang = EShLangVertex;
+        internalConfig.shLang = EShLangVertex;
     } else {
-        mShLang = EShLangFragment;
+        internalConfig.shLang = EShLangFragment;
     }
 
     TProgram program;
-    TShader tShader(mShLang);
+    TShader tShader(internalConfig.shLang);
 
     // The cleaner must be declared after the TShader to prevent ASAN failures.
     GLSLangCleaner cleaner;
@@ -220,10 +193,11 @@ bool GLSLPostProcessor::process(const std::string& inputShader, Config const& co
     const char* shaderCString = inputShader.c_str();
     tShader.setStrings(&shaderCString, 1);
 
-    mLangVersion = GLSLTools::glslangVersionFromShaderModel(config.shaderModel);
-    GLSLTools::prepareShaderParser(tShader, mShLang, mLangVersion, mOptimization);
+    internalConfig.langVersion = GLSLTools::glslangVersionFromShaderModel(config.shaderModel);
+    GLSLTools::prepareShaderParser(targetApi, tShader, internalConfig.shLang,
+            internalConfig.langVersion, mOptimization);
     EShMessages msg = GLSLTools::glslangFlagsFromTargetApi(targetApi);
-    bool ok = tShader.parse(&DefaultTBuiltInResource, mLangVersion, false, msg);
+    bool ok = tShader.parse(&DefaultTBuiltInResource, internalConfig.langVersion, false, msg);
     if (!ok) {
         utils::slog.e << tShader.getInfoLog() << utils::io::endl;
         return false;
@@ -240,12 +214,14 @@ bool GLSLPostProcessor::process(const std::string& inputShader, Config const& co
 
     switch (mOptimization) {
         case MaterialBuilder::Optimization::NONE:
-            if (mSpirvOutput) {
+            if (internalConfig.spirvOutput) {
                 SpvOptions options;
                 options.generateDebugInfo = mGenerateDebugInfo;
-                GlslangToSpv(*program.getIntermediate(mShLang), *mSpirvOutput, &options);
-                if (mMslOutput) {
-                    SpvToMsl(mSpirvOutput, mMslOutput, config);
+                GlslangToSpv(*program.getIntermediate(internalConfig.shLang),
+                        *internalConfig.spirvOutput, &options);
+                if (internalConfig.mslOutput) {
+                    spirvToToMsl(internalConfig.spirvOutput, internalConfig.mslOutput, config,
+                            internalConfig.minifier);
                 }
             } else {
                 utils::slog.e << "GLSL post-processor invoked with optimization level NONE"
@@ -253,32 +229,41 @@ bool GLSLPostProcessor::process(const std::string& inputShader, Config const& co
             }
             break;
         case MaterialBuilder::Optimization::PREPROCESSOR:
-            preprocessOptimization(tShader, config);
+            preprocessOptimization(tShader, config, internalConfig);
             break;
         case MaterialBuilder::Optimization::SIZE:
         case MaterialBuilder::Optimization::PERFORMANCE:
-            fullOptimization(tShader, config);
+            fullOptimization(tShader, config, internalConfig);
             break;
     }
 
-    if (mGlslOutput) {
-        *mGlslOutput = shrinkString(*mGlslOutput);
+    if (internalConfig.glslOutput) {
+        *internalConfig.glslOutput =
+                internalConfig.minifier.removeWhitespace(*internalConfig.glslOutput);
+
+        // In theory this should only be enabled for SIZE, but in practice we often use PERFORMANCE.
+        if (mOptimization != MaterialBuilder::Optimization::NONE) {
+           *internalConfig.glslOutput =
+                   internalConfig.minifier.renameStructFields(*internalConfig.glslOutput);
+        }
+
         if (mPrintShaders) {
-            utils::slog.i << *mGlslOutput << utils::io::endl;
+            utils::slog.i << *internalConfig.glslOutput << utils::io::endl;
         }
     }
     return true;
 }
 
 void GLSLPostProcessor::preprocessOptimization(glslang::TShader& tShader,
-        GLSLPostProcessor::Config const& config) const {
+        GLSLPostProcessor::Config const& config, InternalConfig& internalConfig) const {
+
     using TargetApi = MaterialBuilder::TargetApi;
 
     std::string glsl;
     TShader::ForbidIncluder forbidIncluder;
 
     int version = GLSLTools::glslangVersionFromShaderModel(config.shaderModel);
-    const TargetApi targetApi = mSpirvOutput ? TargetApi::VULKAN : TargetApi::OPENGL;
+    const TargetApi targetApi = internalConfig.spirvOutput ? TargetApi::VULKAN : TargetApi::OPENGL;
     EShMessages msg = GLSLTools::glslangFlagsFromTargetApi(targetApi);
     bool ok = tShader.preprocess(&DefaultTBuiltInResource, version, ENoProfile, false, false,
             msg, &glsl, forbidIncluder);
@@ -287,9 +272,9 @@ void GLSLPostProcessor::preprocessOptimization(glslang::TShader& tShader,
         utils::slog.e << tShader.getInfoLog() << utils::io::endl;
     }
 
-    if (mSpirvOutput) {
+    if (internalConfig.spirvOutput) {
         TProgram program;
-        TShader spirvShader(mShLang);
+        TShader spirvShader(internalConfig.shLang);
 
         // The cleaner must be declared after the TShader/TProgram which are setting the current
         // pool in the tls
@@ -297,8 +282,9 @@ void GLSLPostProcessor::preprocessOptimization(glslang::TShader& tShader,
 
         const char* shaderCString = glsl.c_str();
         spirvShader.setStrings(&shaderCString, 1);
-        GLSLTools::prepareShaderParser(spirvShader, mShLang, mLangVersion, mOptimization);
-        ok = spirvShader.parse(&DefaultTBuiltInResource, mLangVersion, false, msg);
+        GLSLTools::prepareShaderParser(targetApi, spirvShader,
+                internalConfig.shLang, internalConfig.langVersion, mOptimization);
+        ok = spirvShader.parse(&DefaultTBuiltInResource, internalConfig.langVersion, false, msg);
         program.addShader(&spirvShader);
         // Even though we only have a single shader stage, linking is still necessary to finalize
         // SPIR-V types
@@ -308,21 +294,23 @@ void GLSLPostProcessor::preprocessOptimization(glslang::TShader& tShader,
         } else {
             SpvOptions options;
             options.generateDebugInfo = mGenerateDebugInfo;
-            GlslangToSpv(*program.getIntermediate(mShLang), *mSpirvOutput, &options);
+            GlslangToSpv(*program.getIntermediate(internalConfig.shLang),
+                    *internalConfig.spirvOutput, &options);
         }
     }
 
-    if (mMslOutput) {
-        SpvToMsl(mSpirvOutput, mMslOutput, config);
+    if (internalConfig.mslOutput) {
+        spirvToToMsl(internalConfig.spirvOutput, internalConfig.mslOutput, config,
+                internalConfig.minifier);
     }
 
-    if (mGlslOutput) {
-        *mGlslOutput = glsl;
+    if (internalConfig.glslOutput) {
+        *internalConfig.glslOutput = glsl;
     }
 }
 
 void GLSLPostProcessor::fullOptimization(const TShader& tShader,
-        GLSLPostProcessor::Config const& config) const {
+        GLSLPostProcessor::Config const& config, InternalConfig& internalConfig) const {
     SpirvBlob spirv;
 
     // Compile GLSL to to SPIR-V
@@ -334,16 +322,16 @@ void GLSLPostProcessor::fullOptimization(const TShader& tShader,
     OptimizerPtr optimizer = createOptimizer(mOptimization, config);
     optimizeSpirv(optimizer, spirv);
 
-    if (mSpirvOutput) {
-        *mSpirvOutput = spirv;
+    if (internalConfig.spirvOutput) {
+        *internalConfig.spirvOutput = spirv;
     }
 
-    if (mMslOutput) {
-        SpvToMsl(&spirv, mMslOutput, config);
+    if (internalConfig.mslOutput) {
+        spirvToToMsl(&spirv, internalConfig.mslOutput, config, internalConfig.minifier);
     }
 
     // Transpile back to GLSL
-    if (mGlslOutput) {
+    if (internalConfig.glslOutput) {
         CompilerGLSL::Options glslOptions;
         glslOptions.es = config.shaderModel == filament::backend::ShaderModel::GL_ES_30;
         glslOptions.version = shaderVersionFromModel(config.shaderModel);
@@ -362,7 +350,7 @@ void GLSLPostProcessor::fullOptimization(const TShader& tShader,
             }
         }
 
-        *mGlslOutput = glslCompiler.compile();
+        *internalConfig.glslOutput = glslCompiler.compile();
     }
 }
 
@@ -396,7 +384,6 @@ void GLSLPostProcessor::optimizeSpirv(OptimizerPtr optimizer, SpirvBlob& spirv) 
 
     // Remove dead module-level objects: functions, types, vars
     spv::spirvbin_t remapper(0);
-    remapper.registerErrorHandler(errorHandler);
     remapper.remap(spirv, spv::spirvbin_base_t::DCE_ALL);
 }
 

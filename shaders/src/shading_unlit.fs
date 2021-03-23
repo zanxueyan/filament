@@ -2,7 +2,7 @@ void addEmissive(const MaterialInputs material, inout vec4 color) {
 #if defined(MATERIAL_HAS_EMISSIVE)
     highp vec4 emissive = material.emissive;
     highp float attenuation = mix(1.0, frameUniforms.exposure, emissive.w);
-    color.rgb += emissive.rgb * attenuation;
+    color.rgb += emissive.rgb * (attenuation * color.a);
 #endif
 }
 
@@ -46,7 +46,7 @@ vec4 evaluateMaterial(const MaterialInputs material) {
         uint cascade = getShadowCascade();
         uint layer = cascade;
 #if defined(HAS_VSM)
-        // TODO: VSM shadow multiplier
+        visibility = shadowVsm(light_shadowMap, layer, getCascadeLightSpacePosition(cascade));
 #else
         visibility = shadow(light_shadowMap, layer, getCascadeLightSpacePosition(cascade));
 #endif

@@ -17,21 +17,8 @@
 #include <bluevk/BlueVK.h> // must be included before vk_mem_alloc
 
 #pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdeprecated"
 #pragma clang diagnostic ignored "-Wundef"
 #pragma clang diagnostic ignored "-Wunused-variable"
-#pragma clang diagnostic ignored "-Wmissing-field-initializers"
-#pragma clang diagnostic ignored "-Wtautological-compare"
-#pragma clang diagnostic ignored "-Wnullability-completeness"
-#pragma clang diagnostic ignored "-Wweak-vtables"
-#pragma clang diagnostic ignored "-Wimplicit-fallthrough"
-
-static const PFN_vkGetInstanceProcAddr& vkGetInstanceProcAddr = bluevk::vkGetInstanceProcAddr;
-static const PFN_vkGetDeviceProcAddr& vkGetDeviceProcAddr = bluevk::vkGetDeviceProcAddr;
-
-#define VMA_DYNAMIC_VULKAN_FUNCTIONS 1
-#define VMA_IMPLEMENTATION
-#include <cstdio>
 #include "vk_mem_alloc.h"
 #pragma clang diagnostic pop
 
@@ -41,7 +28,9 @@ static const PFN_vkGetDeviceProcAddr& vkGetDeviceProcAddr = bluevk::vkGetDeviceP
 
 #include <utils/Panic.h>
 
-#define FILAMENT_VULKAN_CHECK_BLIT_FORMAT 0
+#ifndef VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME
+#define VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME "VK_KHR_portability_subset"
+#endif
 
 using namespace bluevk;
 
@@ -127,6 +116,9 @@ void selectPhysicalDevice(VulkanContext& context) {
             if (!strcmp(extensions[k].extensionName, VK_EXT_DEBUG_MARKER_EXTENSION_NAME)) {
                 context.debugMarkersSupported = true;
             }
+            if (!strcmp(extensions[k].extensionName, VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME)) {
+                context.portabilitySubsetSupported = true;
+            }
         }
         if (!supportsSwapchain) continue;
 
@@ -172,9 +164,9 @@ void selectPhysicalDevice(VulkanContext& context) {
         utils::slog.i << "Selected physical device '"
                 << context.physicalDeviceProperties.deviceName
                 << "' from " << physicalDeviceCount << " physical devices. "
-                << "(vendor 0x" << utils::io::hex << vendorID << ", "
-                << "device 0x" << deviceID << ", "
-                << "driver 0x" << driverVersion << ", "
+                << "(vendor " << utils::io::hex << vendorID << ", "
+                << "device " << deviceID << ", "
+                << "driver " << driverVersion << ", "
                 << utils::io::dec << "api " << major << "." << minor << ")"
                 << utils::io::endl;
         return;
@@ -191,6 +183,9 @@ void createLogicalDevice(VulkanContext& context) {
     };
     if (context.debugMarkersSupported && !context.debugUtilsSupported) {
         deviceExtensionNames.push_back(VK_EXT_DEBUG_MARKER_EXTENSION_NAME);
+    }
+    if (context.portabilitySubsetSupported) {
+        deviceExtensionNames.push_back(VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME);
     }
     deviceQueueCreateInfo->sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
     deviceQueueCreateInfo->queueFamilyIndex = context.graphicsQueueFamilyIndex;
@@ -588,14 +583,14 @@ void waitForIdle(VulkanContext& context) {
         uint32_t nfences = 0;
         auto& surfaceContext = *context.currentSurface;
         for (auto& swapContext : surfaceContext.swapContexts) {
-            assert(nfences < 4);
+            assert_invariant(nfences < 4);
             if (swapContext.commands.fence && swapContext.commands.fence->submitted) {
                 fences[nfences++] = swapContext.commands.fence->fence;
                 swapContext.commands.fence->submitted = false;
             }
         }
         if (nfences > 0) {
-            vkWaitForFences(context.device, nfences, fences, VK_FALSE, ~0ull);
+            vkWaitForFences(context.device, nfences, fences, VK_TRUE, UINT64_MAX);
         }
 
         // Next flush the active command buffer and wait for it to finish.
@@ -630,7 +625,7 @@ bool acquireSwapCommandBuffer(VulkanContext& context) {
             return false;
         }
 
-        assert(result == VK_SUCCESS || result == VK_SUBOPTIMAL_KHR);
+        assert_invariant(result == VK_SUCCESS || result == VK_SUBOPTIMAL_KHR);
     }
 
     SwapContext& swap = getSwapContext(context);
@@ -638,7 +633,7 @@ bool acquireSwapCommandBuffer(VulkanContext& context) {
     // Ensure that the previous submission of this command buffer has finished.
     auto& cmdfence = swap.commands.fence;
     if (cmdfence) {
-        VkResult result = vkWaitForFences(context.device, 1, &cmdfence->fence, VK_FALSE, UINT64_MAX);
+        VkResult result = vkWaitForFences(context.device, 1, &cmdfence->fence, VK_TRUE, UINT64_MAX);
         ASSERT_POSTCONDITION(result == VK_SUCCESS, "vkWaitForFences error.");
     }
 
@@ -685,7 +680,7 @@ void flushCommandBuffer(VulkanContext& context) {
     cmdfence->condition.notify_all();
 
     // Restart the command buffer.
-    error = vkWaitForFences(context.device, 1, &cmdfence->fence, VK_FALSE, UINT64_MAX);
+    error = vkWaitForFences(context.device, 1, &cmdfence->fence, VK_TRUE, UINT64_MAX);
     ASSERT_POSTCONDITION(!error, "vkWaitForFences error.");
     error = vkResetFences(context.device, 1, &cmdfence->fence);
     ASSERT_POSTCONDITION(!error, "vkResetFences error.");
@@ -720,7 +715,7 @@ VkCommandBuffer acquireWorkCommandBuffer(VulkanContext& context) {
     const VkCommandBufferBeginInfo binfo { .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
     if (work.fence && work.fence->submitted) {
         work.fence->submitted = false;
-        vkWaitForFences(context.device, 1, &work.fence->fence, VK_FALSE, UINT64_MAX);
+        vkWaitForFences(context.device, 1, &work.fence->fence, VK_TRUE, UINT64_MAX);
         vkResetCommandBuffer(work.cmdbuffer, 0);
         vkBeginCommandBuffer(work.cmdbuffer, &binfo);
     }
@@ -759,7 +754,7 @@ void createFinalDepthBuffer(VulkanContext& context, VulkanSurfaceContext& surfac
         .usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
     };
     VkResult error = vkCreateImage(context.device, &imageInfo, VKALLOC, &depthImage);
-    assert(!error && "Unable to create depth image.");
+    assert_invariant(!error && "Unable to create depth image.");
 
     // Allocate memory for the VkImage and bind it.
     VkMemoryRequirements memReqs;
@@ -772,9 +767,9 @@ void createFinalDepthBuffer(VulkanContext& context, VulkanSurfaceContext& surfac
     };
     error = vkAllocateMemory(context.device, &allocInfo, nullptr,
             &surfaceContext.depth.memory);
-    assert(!error && "Unable to allocate depth memory.");
+    assert_invariant(!error && "Unable to allocate depth memory.");
     error = vkBindImageMemory(context.device, depthImage, surfaceContext.depth.memory, 0);
-    assert(!error && "Unable to bind depth memory.");
+    assert_invariant(!error && "Unable to bind depth memory.");
 
     // Create a VkImageView so that we can attach depth to the framebuffer.
     VkImageView depthView;
@@ -790,7 +785,7 @@ void createFinalDepthBuffer(VulkanContext& context, VulkanSurfaceContext& surfac
         },
     };
     error = vkCreateImageView(context.device, &viewInfo, VKALLOC, &depthView);
-    assert(!error && "Unable to create depth view.");
+    assert_invariant(!error && "Unable to create depth view.");
 
     // Unlike the color attachments (which are double-buffered or triple-buffered), we only need one
     // depth attachment in the entire chain.
@@ -839,122 +834,6 @@ VkImageLayout getTextureLayout(TextureUsage usage) {
 
     // Finally, the layout for an immutable texture is optimal read-only.
     return VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-}
-
-static void blit(VkImageAspectFlags aspect, VkFilter filter, VulkanContext* context,
-        const VulkanRenderTarget* srcTarget, VulkanAttachment src, VulkanAttachment dst,
-        const VkOffset3D srcRect[2], const VkOffset3D dstRect[2], VkCommandBuffer cmdbuffer) {
-    const VkImageBlit blitRegions[1] = {{
-        .srcSubresource = { aspect, src.level, src.layer, 1 },
-        .srcOffsets = { srcRect[0], srcRect[1] },
-        .dstSubresource = { aspect, dst.level, dst.layer, 1 },
-        .dstOffsets = { dstRect[0], dstRect[1] }
-    }};
-
-    const VkExtent2D srcExtent = srcTarget->getExtent();
-
-    const VkImageResolve resolveRegions[1] = {{
-        .srcSubresource = { aspect, src.level, src.layer, 1 },
-        .srcOffset = srcRect[0],
-        .dstSubresource = { aspect, dst.level, dst.layer, 1 },
-        .dstOffset = dstRect[0],
-        .extent = { srcExtent.width, srcExtent.height, 1 }
-    }};
-
-    VulkanTexture::transitionImageLayout(cmdbuffer, src.image, VK_IMAGE_LAYOUT_UNDEFINED,
-            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, src.level, 1, 1, aspect);
-
-    VulkanTexture::transitionImageLayout(cmdbuffer, dst.image, VK_IMAGE_LAYOUT_UNDEFINED,
-            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, dst.level, 1, 1, aspect);
-
-    if (src.texture && src.texture->samples > 1 && dst.texture && dst.texture->samples == 1) {
-        assert(aspect != VK_IMAGE_ASPECT_DEPTH_BIT && "Resolve with depth is not yet supported.");
-        vkCmdResolveImage(cmdbuffer, src.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, dst.image,
-                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, resolveRegions);
-    } else {
-        vkCmdBlitImage(cmdbuffer, src.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, dst.image,
-                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, blitRegions, filter);
-    }
-
-    if (src.texture) {
-        VulkanTexture::transitionImageLayout(cmdbuffer, src.image, VK_IMAGE_LAYOUT_UNDEFINED,
-                getTextureLayout(src.texture->usage), src.level, 1, 1, aspect);
-    } else if  (!context->currentSurface->headlessQueue) {
-        VulkanTexture::transitionImageLayout(cmdbuffer, src.image, VK_IMAGE_LAYOUT_UNDEFINED,
-                VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, src.level, 1, 1, aspect);
-    }
-
-    // Determine the desired texture layout for the destination while ensuring that the default
-    // render target is supported, which has no associated texture.
-    const VkImageLayout desiredLayout = dst.texture ? getTextureLayout(dst.texture->usage) :
-            getSwapContext(*context).attachment.layout;
-
-    VulkanTexture::transitionImageLayout(cmdbuffer, dst.image, VK_IMAGE_LAYOUT_UNDEFINED,
-            desiredLayout, dst.level, 1, 1, aspect);
-}
-
-void blitDepth(VulkanContext* context, const VulkanRenderTarget* dstTarget,
-        const VkOffset3D dstRect[2], const VulkanRenderTarget* srcTarget,
-        const VkOffset3D srcRect[2]) {
-    const VulkanAttachment src = srcTarget->getDepth();
-    const VulkanAttachment dst = dstTarget->getDepth();
-    const VkImageAspectFlags aspect = VK_IMAGE_ASPECT_DEPTH_BIT;
-
-#if FILAMENT_VULKAN_CHECK_BLIT_FORMAT
-    const VkPhysicalDevice gpu = context->physicalDevice;
-    VkFormatProperties info;
-    vkGetPhysicalDeviceFormatProperties(gpu, src.format, &info);
-    if (!ASSERT_POSTCONDITION_NON_FATAL(info.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_SRC_BIT,
-            "Depth format is not blittable")) {
-        return;
-    }
-    vkGetPhysicalDeviceFormatProperties(gpu, dst.format, &info);
-    if (!ASSERT_POSTCONDITION_NON_FATAL(info.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_DST_BIT,
-            "Depth format is not blittable")) {
-        return;
-    }
-#endif
-
-    if (!context->currentCommands) {
-        VkCommandBuffer cmdbuf = acquireWorkCommandBuffer(*context);
-        blit(aspect, VK_FILTER_NEAREST, context, srcTarget, src, dst, srcRect, dstRect, cmdbuf);
-        flushWorkCommandBuffer(*context);
-    } else {
-        VkCommandBuffer cmdbuf = context->currentCommands->cmdbuffer;
-        blit(aspect, VK_FILTER_NEAREST, context, srcTarget, src, dst, srcRect, dstRect, cmdbuf);
-    }
-}
-
-void blitColor(VulkanContext* context, const VulkanRenderTarget* dstTarget,
-        const VkOffset3D dstRect[2], const VulkanRenderTarget* srcTarget,
-        const VkOffset3D srcRect[2], VkFilter filter, int targetIndex) {
-    const VulkanAttachment src = srcTarget->getColor(targetIndex);
-    const VulkanAttachment dst = dstTarget->getColor(0);
-    const VkImageAspectFlags aspect = VK_IMAGE_ASPECT_COLOR_BIT;
-
-#if FILAMENT_VULKAN_CHECK_BLIT_FORMAT
-    const VkPhysicalDevice gpu = context->physicalDevice;
-    VkFormatProperties info;
-    vkGetPhysicalDeviceFormatProperties(gpu, src.format, &info);
-    if (!ASSERT_POSTCONDITION_NON_FATAL(info.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_SRC_BIT,
-            "Source format is not blittable")) {
-        return;
-    }
-    vkGetPhysicalDeviceFormatProperties(gpu, dst.format, &info);
-    if (!ASSERT_POSTCONDITION_NON_FATAL(info.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_DST_BIT,
-            "Destination format is not blittable")) {
-        return;
-    }
-#endif
-
-    if (!context->currentCommands) {
-        VkCommandBuffer cmdbuf = acquireWorkCommandBuffer(*context);
-        blit(aspect, filter, context, srcTarget, src, dst, srcRect, dstRect, cmdbuf);
-        flushWorkCommandBuffer(*context);
-    } else {
-        VkCommandBuffer cmdbuf = context->currentCommands->cmdbuffer;
-        blit(aspect, filter, context, srcTarget, src, dst, srcRect, dstRect, cmdbuf);
-    }
 }
 
 void createEmptyTexture(VulkanContext& context, VulkanStagePool& stagePool) {

@@ -31,6 +31,8 @@
 #include <filament/Renderer.h>
 #include <filament/View.h>
 
+#include <fg2/FrameGraphId.h>
+
 #include <backend/DriverEnums.h>
 #include <backend/Handle.h>
 #include <backend/PresentCallable.h>
@@ -39,6 +41,8 @@
 #include <utils/Allocator.h>
 #include <utils/JobSystem.h>
 #include <utils/Slice.h>
+
+#include <tsl/robin_set.h>
 
 namespace filament {
 
@@ -122,7 +126,9 @@ private:
     friend class Renderer;
     using Command = RenderPass::Command;
 
-    backend::Handle<backend::HwRenderTarget> getRenderTarget(FView& view) const noexcept;
+    void getRenderTarget(FView const& view,
+            backend::TargetBufferFlags& outAttachementMask,
+            backend::Handle<backend::HwRenderTarget>& outTarget) const noexcept;
 
     void readPixels(backend::Handle<backend::HwRenderTarget> renderTargetHandle,
             uint32_t xoffset, uint32_t yoffset, uint32_t width, uint32_t height,
@@ -192,7 +198,7 @@ private:
     ClearOptions mClearOptions;
     backend::TargetBufferFlags mDiscardedFlags{};
     backend::TargetBufferFlags mClearFlags{};
-    FRenderTarget* mPreviousRenderTarget = nullptr;
+    tsl::robin_set<FRenderTarget*> mPreviousRenderTargets;
     std::function<void()> mBeginFrameInternal;
 
     // per-frame arena for this Renderer

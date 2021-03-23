@@ -88,21 +88,12 @@ if (UNIX AND NOT APPLE AND NOT ANDROID AND NOT WEBGL)
 endif()
 
 if (LINUX)
-
     if (FILAMENT_SUPPORTS_XCB)
         add_definitions(-DFILAMENT_SUPPORTS_XCB)
     endif()
 
     if (FILAMENT_SUPPORTS_XLIB)
         add_definitions(-DFILAMENT_SUPPORTS_XLIB)
-    endif()
-
-    execute_process(COMMAND uname -p
-        OUTPUT_VARIABLE PROCESSOR_ARCH
-        OUTPUT_STRIP_TRAILING_WHITESPACE
-    )
-    if ("${PROCESSOR_ARCH}" STREQUAL "aarch64")
-        set(LINUX_AARCH64 TRUE)
     endif()
 endif()
 
@@ -271,7 +262,10 @@ if (LINUX)
     # /usr/bin/ld: ../bluegl/libbluegl.a(BlueGL.cpp.o): relocation R_X86_64_32S
     # against `.bss' can not be used when making a shared object; recompile with -fPIC
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC")
+endif()
 
+if (ANDROID)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC")
 endif()
 
 if (CYGWIN)
@@ -305,7 +299,7 @@ endif()
 
 # On Android RELEASE builds, we disable exceptions and RTTI to save some space (about 75 KiB
 # saved by -fno-exception and 10 KiB saved by -fno-rtti).
-if (ANDROID OR WEBGL)
+if (ANDROID OR IOS OR WEBGL)
     set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -fno-exceptions -fno-unwind-tables -fno-asynchronous-unwind-tables -fno-rtti")
 endif()
 
@@ -441,7 +435,18 @@ set(MATC_BASE_FLAGS ${MATC_API_FLAGS} -p ${MATC_TARGET} ${MATC_OPT_FLAGS})
 # ==================================================================================================
 # choose where to put the objects in the dist folder
 if (NOT DIST_ARCH)
-    set(DIST_ARCH x86_64)
+    # On Apple silicon, the value of CMAKE_HOST_SYSTEM_PROCESSOR varies based on the CMake process's
+    # own architecture. Because of this, running a x86_64 CMake binary on Apple silicon will cause
+    # DIST_ARCH to be set incorrectly.
+    set(DIST_ARCH "${CMAKE_HOST_SYSTEM_PROCESSOR}")
+
+    if (CMAKE_OSX_ARCHITECTURES MATCHES ".*;.*")
+        set(DIST_ARCH "universal")
+    else()
+        if (NOT CMAKE_OSX_ARCHITECTURES STREQUAL "")
+            set(DIST_ARCH "${CMAKE_OSX_ARCHITECTURES}")
+        endif()
+    endif()
 endif()
 if (NOT DIST_DIR)
     set(DIST_DIR "${DIST_ARCH}")
@@ -567,6 +572,7 @@ add_subdirectory(${EXTERNAL}/libgtest/tnt)
 add_subdirectory(${LIBRARIES}/camutils)
 add_subdirectory(${LIBRARIES}/filabridge)
 add_subdirectory(${LIBRARIES}/filaflat)
+add_subdirectory(${LIBRARIES}/filagui)
 add_subdirectory(${LIBRARIES}/filameshio)
 add_subdirectory(${LIBRARIES}/geometry)
 add_subdirectory(${LIBRARIES}/gltfio)
@@ -575,15 +581,19 @@ add_subdirectory(${LIBRARIES}/image)
 add_subdirectory(${LIBRARIES}/math)
 add_subdirectory(${LIBRARIES}/mathio)
 add_subdirectory(${LIBRARIES}/utils)
+add_subdirectory(${LIBRARIES}/viewer)
 add_subdirectory(${FILAMENT}/filament)
 add_subdirectory(${FILAMENT}/shaders)
+add_subdirectory(${EXTERNAL}/civetweb/tnt)
 add_subdirectory(${EXTERNAL}/hat-trie/tnt)
+add_subdirectory(${EXTERNAL}/imgui/tnt)
 add_subdirectory(${EXTERNAL}/robin-map/tnt)
 add_subdirectory(${EXTERNAL}/smol-v/tnt)
 add_subdirectory(${EXTERNAL}/benchmark/tnt)
 add_subdirectory(${EXTERNAL}/meshoptimizer)
 add_subdirectory(${EXTERNAL}/cgltf/tnt)
 add_subdirectory(${EXTERNAL}/draco/tnt)
+add_subdirectory(${EXTERNAL}/jsmn/tnt)
 add_subdirectory(${EXTERNAL}/stb/tnt)
 add_subdirectory(${EXTERNAL}/getopt)
 
@@ -597,7 +607,6 @@ if (FILAMENT_BUILD_FILAMAT OR IS_HOST_PLATFORM)
 
     # the material debugger requires filamat
     if (FILAMENT_ENABLE_MATDBG OR IS_HOST_PLATFORM)
-        add_subdirectory(${EXTERNAL}/civetweb/tnt)
         add_subdirectory(${LIBRARIES}/matdbg)
     endif()
 endif()
@@ -621,9 +630,7 @@ endif()
 if (IS_HOST_PLATFORM)
     add_subdirectory(${LIBRARIES}/bluegl)
     add_subdirectory(${LIBRARIES}/filamentapp)
-    add_subdirectory(${LIBRARIES}/filagui)
     add_subdirectory(${LIBRARIES}/imageio)
-    add_subdirectory(${LIBRARIES}/viewer)
 
     add_subdirectory(${FILAMENT}/java/filamat)
     add_subdirectory(${FILAMENT}/java/filament)
@@ -633,8 +640,6 @@ if (IS_HOST_PLATFORM)
 
     add_subdirectory(${EXTERNAL}/astcenc/tnt)
     add_subdirectory(${EXTERNAL}/etc2comp)
-    add_subdirectory(${EXTERNAL}/imgui/tnt)
-    add_subdirectory(${EXTERNAL}/jsmn/tnt)
     add_subdirectory(${EXTERNAL}/libassimp/tnt)
     add_subdirectory(${EXTERNAL}/libpng/tnt)
     add_subdirectory(${EXTERNAL}/libsdl2/tnt)

@@ -14,6 +14,7 @@ file(GLOB_RECURSE PUBLIC_HDRS ${PUBLIC_HDR_DIR}/${TARGET}/*.h)
 set(DIST_HDRS
         ${PUBLIC_HDR_DIR}/${TARGET}/algorithm.h
         ${PUBLIC_HDR_DIR}/${TARGET}/bitset.h
+        ${PUBLIC_HDR_DIR}/${TARGET}/debug.h
         ${PUBLIC_HDR_DIR}/${TARGET}/Allocator.h
         ${PUBLIC_HDR_DIR}/${TARGET}/BitmaskEnum.h
         ${PUBLIC_HDR_DIR}/${TARGET}/compiler.h
@@ -46,6 +47,7 @@ set(DIST_GENERIC_HDRS
 set(SRCS
         src/api_level.cpp
         src/ashmem.cpp
+        src/debug.cpp
         src/Allocator.cpp
         src/CallStack.cpp
         src/CString.cpp
@@ -87,6 +89,7 @@ target_link_libraries(${TARGET} PUBLIC tsl)
 
 if (ANDROID)
     target_link_libraries(${TARGET} PUBLIC log)
+    target_link_libraries(${TARGET} PRIVATE dl)
 endif()
 
 if (WIN32)
@@ -98,6 +101,7 @@ if (LINUX)
     set(THREADS_PREFER_PTHREAD_FLAG ON)
     find_package(Threads REQUIRED)
     target_link_libraries(${TARGET} PRIVATE Threads::Threads)
+    target_link_libraries(${TARGET} PRIVATE dl)
 endif()
 
 # ==================================================================================================

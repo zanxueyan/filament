@@ -104,7 +104,7 @@ endif()
 # ==================================================================================================
 
 if (FILAMENT_SUPPORTS_METAL)
-    list(APPEND SRCS
+    set(METAL_SRCS
             src/metal/MetalBlitter.mm
             src/metal/MetalBuffer.mm
             src/metal/MetalBufferPool.mm
@@ -117,6 +117,18 @@ if (FILAMENT_SUPPORTS_METAL)
             src/metal/MetalTimerQuery.mm
             src/metal/PlatformMetal.mm
     )
+
+    list(APPEND SRCS ${METAL_SRCS})
+
+    if (IOS)
+        # Objective-C++ sources need an additional compiler flag on iOS to disable exceptions.
+        set_property(SOURCE
+            ${METAL_SRCS}
+            src/opengl/PlatformCocoaTouchGL.mm
+            src/opengl/CocoaTouchExternalImage.mm
+            src/opengl/PlatformCocoaGL.mm
+            PROPERTY COMPILE_FLAGS -fno-objc-exceptions)
+    endif()
 endif()
 
 # ==================================================================================================
@@ -128,6 +140,8 @@ if (FILAMENT_SUPPORTS_VULKAN)
     list(APPEND SRCS
             src/vulkan/VulkanBinder.cpp
             src/vulkan/VulkanBinder.h
+            src/vulkan/VulkanBlitter.cpp
+            src/vulkan/VulkanBlitter.h
             src/vulkan/VulkanBuffer.cpp
             src/vulkan/VulkanBuffer.h
             src/vulkan/VulkanContext.cpp
@@ -141,6 +155,7 @@ if (FILAMENT_SUPPORTS_VULKAN)
             src/vulkan/VulkanFboCache.h
             src/vulkan/VulkanHandles.cpp
             src/vulkan/VulkanHandles.h
+            src/vulkan/VulkanMemory.cpp
             src/vulkan/VulkanPlatform.cpp
             src/vulkan/VulkanPlatform.h
             src/vulkan/VulkanSamplerCache.cpp
@@ -176,6 +191,7 @@ add_definitions(-DSYSTRACE_TAG=2 )
 # specify where our headers are
 include_directories(${PUBLIC_HDR_DIR})
 include_directories(src)
+include_directories(${GENERATION_ROOT})
 
 # we're building a library
 add_library(${TARGET} STATIC ${PRIVATE_HDRS} ${PUBLIC_HDRS} ${SRCS})
@@ -189,6 +205,45 @@ target_include_directories(${TARGET} PUBLIC ${PUBLIC_HDR_DIR})
 
 add_library(${TARGET}_headers INTERFACE)
 target_include_directories(${TARGET}_headers INTERFACE ${PUBLIC_HDR_DIR})
+
+# ==================================================================================================
+# Build SPIRV snippets used by the Vulkan backend.
+# ==================================================================================================
+
+set(VKSHADERS_DIR  "${CMAKE_CURRENT_BINARY_DIR}/generated/vkshaders")
+
+file(MAKE_DIRECTORY ${VKSHADERS_DIR})
+
+get_resgen_vars(${VKSHADERS_DIR} vkshaders)
+
+set(VKSHADER_BINS)
+function(build_vkshader SOURCE TARGET_PATH)
+    set(SOURCE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/src/vulkan/${SOURCE}")
+    set(VKSHADER_BINS ${VKSHADER_BINS} ${TARGET_PATH} PARENT_SCOPE)
+    add_custom_command(
+            OUTPUT ${TARGET_PATH}
+            COMMAND matc --raw -o ${TARGET_PATH} ${SOURCE_PATH}
+            MAIN_DEPENDENCY ${SOURCE_PATH}
+            DEPENDS matc ${SOURCE_PATH}
+            COMMENT "Building SPIR-V")
+endfunction()
+build_vkshader("BlitColor.vs" "BlitColorVs.spv")
+build_vkshader("BlitColor.fs" "BlitColorFs.spv")
+
+add_custom_command(
+        OUTPUT ${RESGEN_OUTPUTS}
+        COMMAND resgen ${RESGEN_FLAGS} ${VKSHADER_BINS}
+        DEPENDS resgen ${VKSHADER_BINS}
+        COMMENT "Aggregating compiled VK shaders")
+
+if (DEFINED RESGEN_SOURCE_FLAGS)
+    set_source_files_properties(${RESGEN_SOURCE} PROPERTIES COMPILE_FLAGS ${RESGEN_SOURCE_FLAGS})
+endif()
+
+set(DUMMY_SRC "${VKSHADERS_DIR}/dummy.c")
+add_custom_command(OUTPUT ${DUMMY_SRC} COMMAND echo "//" > ${DUMMY_SRC})
+
+add_library(vkshaders STATIC ${DUMMY_SRC} ${RESGEN_SOURCE})
 
 # ==================================================================================================
 # Dependencies
@@ -215,7 +270,7 @@ if(NOT IOS AND NOT ANDROID AND NOT WEBGL)
 endif()
 
 if (FILAMENT_SUPPORTS_VULKAN)
-    target_link_libraries(${TARGET} PUBLIC bluevk vkmemalloc)
+    target_link_libraries(${TARGET} PUBLIC bluevk vkmemalloc vkshaders)
 endif()
 
 if (FILAMENT_SUPPORTS_METAL)
@@ -284,6 +339,7 @@ target_link_libraries(${TARGET} PRIVATE
 # ==================================================================================================
 set(INSTALL_TYPE ARCHIVE)
 install(TARGETS ${TARGET} ${INSTALL_TYPE} DESTINATION lib/${DIST_DIR})
+install(TARGETS vkshaders ${INSTALL_TYPE} DESTINATION lib/${DIST_DIR})
 install(DIRECTORY ${PUBLIC_HDR_DIR}/backend DESTINATION include)
 
 # ==================================================================================================
@@ -297,10 +353,13 @@ if (APPLE)
         test/ShaderGenerator.cpp
         test/TrianglePrimitive.cpp
         test/Arguments.cpp
+        test/test_FeedbackLoops.cpp
+        test/test_Blit.cpp
         test/test_MissingRequiredAttributes.cpp
         test/test_ReadPixels.cpp
         test/test_BufferUpdates.cpp
-        test/test_MRT.cpp)
+        test/test_MRT.cpp
+        )
 
     target_link_libraries(backend_test PRIVATE
         backend

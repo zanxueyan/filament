@@ -79,6 +79,12 @@ OpenGLContext::OpenGLContext() noexcept {
         bugs.disable_invalidate_framebuffer = true;
     }
 
+    // Chrome does not support feedback loops in WebGL 2.0. See also:
+    // https://bugs.chromium.org/p/chromium/issues/detail?id=1066201
+#if defined(__EMSCRIPTEN__)
+    bugs.disable_feedback_loops = true;
+#endif
+
     // Figure out if we have the extension we need
     GLint n = 0;
     glGetIntegerv(GL_NUM_EXTENSIONS, &n);
@@ -107,7 +113,7 @@ OpenGLContext::OpenGLContext() noexcept {
         initExtensionsGL(major, minor, exts);
         features.multisample_texture = true;
     };
-    assert(shaderModel != ShaderModel::UNKNOWN);
+    assert_invariant(shaderModel != ShaderModel::UNKNOWN);
     mShaderModel = shaderModel;
 
     /*
@@ -257,7 +263,7 @@ void OpenGLContext::bindBuffer(GLenum target, GLuint buffer) noexcept {
     if (target == GL_ELEMENT_ARRAY_BUFFER) {
         // GL_ELEMENT_ARRAY_BUFFER is a special case, where the currently bound VAO remembers
         // the index buffer, unless there are no VAO bound (see: bindVertexArray)
-        assert(state.vao.p);
+        assert_invariant(state.vao.p);
         if (state.buffers.genericBinding[targetIndex] != buffer
             || ((state.vao.p != &mDefaultVAO) && (state.vao.p->elementArray != buffer))) {
             state.buffers.genericBinding[targetIndex] = buffer;

@@ -29,7 +29,11 @@ set(SRCS
         src/FilamentInstance.cpp
         src/GltfEnums.h
         src/MaterialProvider.cpp
+        src/MorphHelper.h
+        src/MorphHelper.cpp
         src/ResourceLoader.cpp
+        src/TangentsJob.h
+        src/TangentsJob.cpp
         src/UbershaderLoader.cpp
         src/Wireframe.cpp
         src/Wireframe.h
@@ -66,6 +70,7 @@ generate_mat(ubershader unlit fade)
 generate_mat(ubershader unlit opaque)
 generate_mat(ubershader unlit masked)
 generate_mat(transmission lit transmission)
+generate_mat(sheen lit sheen)
 
 set(RESOURCE_BINS)
 foreach (input_path ${MATERIAL_SRCS})
@@ -189,7 +194,7 @@ if (NOT WEBGL AND NOT ANDROID AND NOT IOS)
     # ==================================================================================================
     # Installation
     # ==================================================================================================
-    install(TARGETS ${TARGET} gltfio_core ARCHIVE DESTINATION lib/${DIST_DIR})
+    install(TARGETS ${TARGET} gltfio_core gltfio_resources gltfio_resources_lite ARCHIVE DESTINATION lib/${DIST_DIR})
     install(DIRECTORY ${PUBLIC_HDR_DIR}/gltfio DESTINATION include)
 
 else()

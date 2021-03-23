@@ -23,7 +23,8 @@
 
 #include "FrameHistory.h"
 
-#include <fg/FrameGraphHandle.h>
+#include <fg2/FrameGraphId.h>
+#include <fg2/FrameGraphResources.h>
 
 #include <backend/DriverEnums.h>
 #include <filament/View.h>
@@ -36,11 +37,11 @@
 
 namespace filament {
 
-class FrameGraph;
 class FColorGrading;
 class FEngine;
 class FMaterial;
 class FMaterialInstance;
+class FrameGraph;
 class FView;
 class RenderPass;
 struct CameraInfo;
@@ -125,7 +126,7 @@ public:
 
     // VSM shadow mipmap pass
     FrameGraphId<FrameGraphTexture> vsmMipmapPass(FrameGraph& fg,
-            FrameGraphId<FrameGraphTexture> input, uint8_t layer, size_t level) noexcept;
+            FrameGraphId<FrameGraphTexture> input, uint8_t layer, size_t level, bool finalize) noexcept;
 
     backend::Handle<backend::HwTexture> getOneTexture() const { return mDummyOneTexture; }
     backend::Handle<backend::HwTexture> getZeroTexture() const { return mDummyZeroTexture; }
@@ -138,9 +139,6 @@ public:
 private:
     FEngine& mEngine;
     class PostProcessMaterial;
-
-    FrameGraphId<FrameGraphTexture> mipmapPass(FrameGraph& fg,
-            FrameGraphId<FrameGraphTexture> input, size_t level) noexcept;
 
     struct BilateralPassConfig {
         uint8_t kernelSize = 11;
@@ -162,11 +160,15 @@ private:
             FrameGraphId<FrameGraphTexture> input, backend::TextureFormat outFormat,
             View::BloomOptions& bloomOptions, math::float2 scale) noexcept;
 
-    void commitAndRender(FrameGraphRenderTarget const& out,
+    FrameGraphId<FrameGraphTexture> bloomPassPingPong(FrameGraph& fg,
+            FrameGraphId<FrameGraphTexture> input, backend::TextureFormat outFormat,
+            View::BloomOptions& bloomOptions, math::float2 scale) noexcept;
+
+    void commitAndRender(FrameGraphResources::RenderPassInfo const& out,
             PostProcessMaterial const& material, uint8_t variant,
             backend::DriverApi& driver) const noexcept;
 
-    void commitAndRender(FrameGraphRenderTarget const& out,
+    void commitAndRender(FrameGraphResources::RenderPassInfo const& out,
             PostProcessMaterial const& material,
             backend::DriverApi& driver) const noexcept;
 
@@ -221,6 +223,7 @@ private:
     std::uniform_real_distribution<float> mUniformDistribution{0.0f, 1.0f};
 
     const math::float2 mHaltonSamples[16];
+    bool mDisableFeedbackLoops;
 };
 
 

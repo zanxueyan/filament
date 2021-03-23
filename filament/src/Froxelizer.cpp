@@ -25,6 +25,7 @@
 
 #include <utils/BinaryTreeArray.h>
 #include <utils/Systrace.h>
+#include <utils/debug.h>
 
 #include <math/mat4.h>
 #include <math/fast.h>
@@ -179,10 +180,10 @@ bool Froxelizer::prepare(
             uint32_t(GROUP_COUNT)
     };
 
-    assert(mFroxelBufferUser.begin());
-    assert(mRecordBufferUser.begin());
-    assert(mLightRecords.begin());
-    assert(mFroxelShardedData.begin());
+    assert_invariant(mFroxelBufferUser.begin());
+    assert_invariant(mRecordBufferUser.begin());
+    assert_invariant(mLightRecords.begin());
+    assert_invariant(mFroxelShardedData.begin());
 
     // initialize buffers that need to be
     memset(mLightRecords.data(), 0, mLightRecords.sizeInBytes());
@@ -218,9 +219,9 @@ void Froxelizer::computeFroxelLayout(
         froxelCountX = (width  + froxelDimension - 1) / froxelDimension;
         froxelCountY = (height + froxelDimension - 1) / froxelDimension;
 
-        assert(froxelCountX);
-        assert(froxelCountY);
-        assert(froxelCountX * froxelCountY <= froxelPlaneCount);
+        assert_invariant(froxelCountX);
+        assert_invariant(froxelCountY);
+        assert_invariant(froxelCountX * froxelCountY <= froxelPlaneCount);
 
         *dim = froxelDimension;
         *countX = uint16_t(froxelCountX);
@@ -287,10 +288,10 @@ bool Froxelizer::update() noexcept {
         mPlanesY         = mArena.alloc<float4>(froxelCountY + 1);
         mBoundingSpheres = mArena.alloc<float4>(froxelCount);
 
-        assert(mDistancesZ);
-        assert(mPlanesX);
-        assert(mPlanesY);
-        assert(mBoundingSpheres);
+        assert_invariant(mDistancesZ);
+        assert_invariant(mPlanesX);
+        assert_invariant(mPlanesY);
+        assert_invariant(mBoundingSpheres);
 
         mDistancesZ[0] = 0.0f;
         const float zLightNear = mZLightNear;
@@ -318,10 +319,10 @@ bool Froxelizer::update() noexcept {
     }
 
     if (UTILS_UNLIKELY(mDirtyFlags & (PROJECTION_CHANGED | VIEWPORT_CHANGED))) {
-        assert(mDistancesZ);
-        assert(mPlanesX);
-        assert(mPlanesY);
-        assert(mBoundingSpheres);
+        assert_invariant(mDistancesZ);
+        assert_invariant(mPlanesX);
+        assert_invariant(mPlanesY);
+        assert_invariant(mBoundingSpheres);
 
         // clip-space dimensions
         const float froxelWidthInClipSpace  = (2.0f * mFroxelDimension.x) / mViewport.width;
@@ -361,7 +362,7 @@ bool Froxelizer::update() noexcept {
         //                      n0.(n1 x n2)
 
         // use stack memory here, it's only 16 KiB max
-        assert(mFroxelCountX <= 2048);
+        assert_invariant(mFroxelCountX <= 2048);
         typename std::aligned_storage<sizeof(float2), alignof(float2)>::type stack[2048];
         float2* const UTILS_RESTRICT minMaxX = reinterpret_cast<float2*>(stack);
 
@@ -385,7 +386,7 @@ bool Froxelizer::update() noexcept {
             // the camera.
             minp.z = -planesZ[iz+1];
             maxp.z = -planesZ[iz];
-            assert(minp.z < maxp.z);
+            assert_invariant(minp.z < maxp.z);
 
             for (size_t ix = 0, nx = froxelCountX; ix < nx; ++ix) {
                 // left, right planes for all froxels at ix
@@ -401,7 +402,7 @@ bool Froxelizer::update() noexcept {
                     minp.x = std::min(minp.x, px);
                     maxp.x = std::max(maxp.x, px);
                 }
-                assert(minp.x < maxp.x);
+                assert_invariant(minp.x < maxp.x);
                 minMaxX[ix] = float2{ minp.x, maxp.x };
             }
 
@@ -419,11 +420,11 @@ bool Froxelizer::update() noexcept {
                     minp.y = std::min(minp.y, py);
                     maxp.y = std::max(maxp.y, py);
                 }
-                assert(minp.y < maxp.y);
+                assert_invariant(minp.y < maxp.y);
 
                 for (size_t ix = 0, nx = froxelCountX; ix < nx; ++ix) {
                     // note: clang vectorizes this loop!
-                    assert(getFroxelIndex(ix, iy, iz) == fi);
+                    assert_invariant(getFroxelIndex(ix, iy, iz) == fi);
                     minp.x = minMaxX[ix][0];
                     maxp.x = minMaxX[ix][1];
                     boundingSpheres[fi++] = { (maxp + minp) * 0.5f, length((maxp - minp) * 0.5f) };
@@ -461,15 +462,15 @@ bool Froxelizer::update() noexcept {
         }
         uniformsNeedUpdating = true;
     }
-    assert(mZLightNear >= mNear);
+    assert_invariant(mZLightNear >= mNear);
     mDirtyFlags = 0;
     return uniformsNeedUpdating;
 }
 
 Froxel Froxelizer::getFroxelAt(size_t x, size_t y, size_t z) const noexcept {
-    assert(x < mFroxelCountX);
-    assert(y < mFroxelCountY);
-    assert(z < mFroxelCountZ);
+    assert_invariant(x < mFroxelCountX);
+    assert_invariant(y < mFroxelCountY);
+    assert_invariant(z < mFroxelCountZ);
     Froxel froxel;
     froxel.planes[Froxel::LEFT]   =  mPlanesX[x];
     froxel.planes[Froxel::BOTTOM] =  mPlanesY[y];
@@ -539,13 +540,13 @@ void Froxelizer::froxelizeLights(FEngine& engine,
             // go through every lights for that froxel
             for (size_t i = 0; i < entry.count; i++) {
                 // get the light index
-                assert(entry.offset + i < RECORD_BUFFER_ENTRY_COUNT);
+                assert_invariant(entry.offset + i < RECORD_BUFFER_ENTRY_COUNT);
 
                 size_t lightIndex = recordBufferUser[entry.offset + i];
-                assert(lightIndex <= CONFIG_MAX_LIGHT_INDEX);
+                assert_invariant(lightIndex <= CONFIG_MAX_LIGHT_INDEX);
 
                 // make sure it corresponds to an existing light
-                assert(lightIndex < lightData.size() - FScene::DIRECTIONAL_LIGHTS_COUNT);
+                assert_invariant(lightIndex < lightData.size() - FScene::DIRECTIONAL_LIGHTS_COUNT);
             }
         }
     }
@@ -585,7 +586,7 @@ void Froxelizer::froxelizeLoop(FEngine& engine,
 
             const size_t group = i % GROUP_COUNT;
             const size_t bit   = i / GROUP_COUNT;
-            assert(bit < LIGHT_PER_GROUP);
+            assert_invariant(bit < LIGHT_PER_GROUP);
 
             FroxelThreadData& threadData = froxelThreadData[group];
             froxelizePointAndSpotLight(threadData, bit, projection, light);
@@ -600,7 +601,7 @@ void Froxelizer::froxelizeLoop(FEngine& engine,
         auto *parent = js.createJob();
         for (size_t i = 0; i < GROUP_COUNT; i++) {
             js.run(jobs::createJob(js, parent, std::cref(process),
-                    lightData.size() - FScene::DIRECTIONAL_LIGHTS_COUNT, i, GROUP_COUNT));
+                    lightData.size() - FScene::DIRECTIONAL_LIGHTS_COUNT, i, GROUP_COUNT), JobSystem::DONT_SIGNAL);
         }
         js.runAndWait(parent);
     } else {
@@ -780,9 +781,9 @@ void Froxelizer::froxelizePointAndSpotLight(
     const size_t y1 = imax.second;      // y1 points to the last value
     const size_t z1 = findSliceZ(zfar); // z1 points to the last value
 
-    assert(x0 < x1);
-    assert(y0 <= y1);
-    assert(z0 <= z1);
+    assert_invariant(x0 < x1);
+    assert_invariant(y0 <= y1);
+    assert_invariant(z0 <= z1);
 #endif
 
     const size_t zcenter = findSliceZ(s.z);
@@ -823,9 +824,9 @@ void Froxelizer::froxelizePointAndSpotLight(
                     size_t ex = 0; // horizontal end index
 
                     // find the begin index (left side)
-                    for (size_t ix = x0; ix <= x1; ++ix) {
-                        // froxel that contain the center if ths sphere is special, we don't even
-                        // need to do the intersection check, it's always true.
+                    for (size_t ix = x0; ix < x1; ++ix) {
+                        // The froxel that contains the center of the sphere is special,
+                        // we don't even need to do the intersection check, it's always true.
                         if (UTILS_LIKELY(ix != xcenter)) {
                             float4 const& plane = ix < xcenter ? planesX[ix + 1] : planesX[ix];
                             if (spherePlaneDistanceSquared(cy, plane.x, plane.z) > 0) {
@@ -838,16 +839,17 @@ void Froxelizer::froxelizePointAndSpotLight(
                             // this is the froxel containing the center of the sphere, it is
                             // definitely participating
                             bx = std::min(bx, ix);
-                            assert(ix + 1 >= ex);
-                            ex = ix + 1;
+                            ex = std::max(ex, ix);
                         }
                     }
 
-                    if (UTILS_UNLIKELY(bx >= ex)) {
+                    if (UTILS_UNLIKELY(bx > ex)) {
                         continue;
                     }
 
-                    assert(bx < mFroxelCountX && ex <= mFroxelCountX);
+                    // the loops below assume 1-past the end for the right side of the range
+                    ex++;
+                    assert_invariant(bx <= mFroxelCountX && ex <= mFroxelCountX);
 
                     size_t fi = getFroxelIndex(bx, iy, iz);
                     if (light.invSin != std::numeric_limits<float>::infinity()) {

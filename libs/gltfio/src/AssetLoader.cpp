@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <gltfio/Animator.h>
 #include <gltfio/AssetLoader.h>
 #include <gltfio/MaterialProvider.h>
 
@@ -23,6 +24,7 @@
 #include <filament/Box.h>
 #include <filament/Camera.h>
 #include <filament/Engine.h>
+#include <filament/Exposure.h>
 #include <filament/IndexBuffer.h>
 #include <filament/LightManager.h>
 #include <filament/Material.h>
@@ -57,6 +59,8 @@ using namespace filament::math;
 using namespace utils;
 
 namespace gltfio {
+
+void importSkins(const cgltf_data* gltf, const NodeMap& nodeMap, SkinVector& dstSkins);
 
 static const auto FREE_CALLBACK = [](void* mem, size_t, void*) { free(mem); };
 
@@ -123,7 +127,7 @@ struct FAssetLoader : public AssetLoader {
     }
 
     void createAsset(const cgltf_data* srcAsset, size_t numInstances);
-    FilamentInstance* createInstance(FFilamentAsset* primary, const cgltf_scene* scene);
+    FFilamentInstance* createInstance(FFilamentAsset* primary, const cgltf_scene* scene);
     void createEntity(const cgltf_node* node, Entity parent, bool enableLight,
             FFilamentInstance* instance);
     void createRenderable(const cgltf_node* node, Entity entity, const char* name);
@@ -187,7 +191,7 @@ FFilamentAsset* FAssetLoader::createAssetFromBinary(const uint8_t* bytes, uint32
     }
     createAsset(sourceAsset, 0);
     if (mResult) {
-        glbdata.swap(mResult->mGlbData);
+        glbdata.swap(mResult->mSourceAsset->glbData);
     }
     return mResult;
 }
@@ -213,14 +217,14 @@ FFilamentAsset* FAssetLoader::createInstancedAsset(const uint8_t* bytes, uint32_
     }
     createAsset(sourceAsset, numInstances);
     if (mResult) {
-        glbdata.swap(mResult->mGlbData);
+        glbdata.swap(mResult->mSourceAsset->glbData);
         std::copy_n(mResult->mInstances.data(), numInstances, instances);
     }
     return mResult;
 }
 
 FilamentInstance* FAssetLoader::createInstance(FFilamentAsset* primary) {
-    if (primary->mIsReleased) {
+    if (!primary->mSourceAsset) {
         slog.e << "Source data has been released; asset is frozen." << io::endl;
         return nullptr;
     }
@@ -228,13 +232,21 @@ FilamentInstance* FAssetLoader::createInstance(FFilamentAsset* primary) {
         slog.e << "Cannot add an instance to a non-instanced asset." << io::endl;
         return nullptr;
     }
-    const cgltf_data* srcAsset = primary->mSourceAsset;
+    const cgltf_data* srcAsset = primary->mSourceAsset->hierarchy;
     const cgltf_scene* scene = srcAsset->scene ? srcAsset->scene : srcAsset->scenes;
     if (!scene) {
         slog.e << "There is no scene in the asset." << io::endl;
         return nullptr;
     }
-    FilamentInstance* instance = createInstance(primary, scene);
+    FFilamentInstance* instance = createInstance(primary, scene);
+
+    // Import the skin data. This is normally done by ResourceLoader but dynamically created
+    // instances are a bit special.
+    importSkins(primary->mSourceAsset->hierarchy, instance->nodeMap, instance->skins);
+    if (primary->mAnimator) {
+        primary->mAnimator->addInstance(instance);
+    }
+
     primary->mDependencyGraph.refinalize();
     return instance;
 }
@@ -251,9 +263,7 @@ void FAssetLoader::createAsset(const cgltf_data* srcAsset, size_t numInstances) 
     }
     #endif
 
-    mResult = new FFilamentAsset(mEngine, mNameManager, &mEntityManager);
-    mResult->mSourceAsset = srcAsset;
-    mResult->acquireSourceAsset();
+    mResult = new FFilamentAsset(mEngine, mNameManager, &mEntityManager, srcAsset);
 
     // If there is no default scene specified, then the default is the first one.
     // It is not an error for a glTF file to have zero scenes.
@@ -304,13 +314,13 @@ void FAssetLoader::createAsset(const cgltf_data* srcAsset, size_t numInstances) 
     }
 
     if (mError) {
-        delete mResult;
+        destroyAsset(mResult);
         mResult = nullptr;
         mError = false;
     }
 }
 
-FilamentInstance* FAssetLoader::createInstance(FFilamentAsset* primary, const cgltf_scene* scene) {
+FFilamentInstance* FAssetLoader::createInstance(FFilamentAsset* primary, const cgltf_scene* scene) {
     auto rootTransform = mTransformManager.getInstance(primary->mRoot);
     Entity instanceRoot = mEntityManager.create();
     mTransformManager.create(instanceRoot, rootTransform);
@@ -505,6 +515,8 @@ void FAssetLoader::createRenderable(const cgltf_node* node, Entity entity, const
 
 bool FAssetLoader::createPrimitive(const cgltf_primitive* inPrim, Primitive* outPrim,
         const UvMap& uvmap, const char* name) {
+    outPrim->uvmap = uvmap;
+
     // Create a little lambda that appends to the asset's vertex buffer slots.
     auto slots = &mResult->mBufferSlots;
     auto addBufferSlot = [slots](BufferSlot entry) {
@@ -653,8 +665,10 @@ bool FAssetLoader::createPrimitive(const cgltf_primitive* inPrim, Primitive* out
     }
 
     cgltf_size targetsCount = inPrim->targets_count;
+
+    // There is no need to emit a warning if there are more than 4 targets. This is only the base
+    // VertexBuffer and more might be created by MorphHelper.
     if (targetsCount > MAX_MORPH_TARGETS) {
-        slog.w << "Too many morph targets in " << name << io::endl;
         targetsCount = MAX_MORPH_TARGETS;
     }
 
@@ -828,7 +842,7 @@ void FAssetLoader::createCamera(const cgltf_camera* camera, Entity entity) {
         const double aspect = projection.aspect_ratio > 0.0 ? projection.aspect_ratio : 1.0;
 
         // Use the scaling matrix to set the aspect ratio, so clients can easily change it.
-        filamentCamera->setScaling(double4 {1.0 / aspect, 1.0, 1.0, 1.0});
+        filamentCamera->setScaling({1.0 / aspect, 1.0 });
     } else if (camera->type == cgltf_camera_type_orthographic) {
         auto& projection = camera->data.orthographic;
 
@@ -862,6 +876,10 @@ MaterialInstance* FAssetLoader::createMaterialInstance(const cgltf_material* inp
         .has_pbr_metallic_roughness = true,
         .has_pbr_specular_glossiness = false,
         .has_clearcoat = false,
+        .has_transmission = false,
+        .has_ior = false,
+        .has_specular = false,
+        .has_sheen = false,
         .pbr_metallic_roughness = {
 	        .base_color_factor = {1.0, 1.0, 1.0, 1.0},
 	        .metallic_factor = 1.0,
@@ -874,6 +892,7 @@ MaterialInstance* FAssetLoader::createMaterialInstance(const cgltf_material* inp
     auto sgConfig = inputMat->pbr_specular_glossiness;
     auto ccConfig = inputMat->clearcoat;
     auto trConfig = inputMat->transmission;
+    auto shConfig = inputMat->sheen;
 
     bool hasTextureTransforms =
         sgConfig.diffuse_texture.has_transform ||
@@ -886,6 +905,8 @@ MaterialInstance* FAssetLoader::createMaterialInstance(const cgltf_material* inp
         ccConfig.clearcoat_texture.has_transform ||
         ccConfig.clearcoat_roughness_texture.has_transform ||
         ccConfig.clearcoat_normal_texture.has_transform ||
+        shConfig.sheen_color_texture.has_transform ||
+        shConfig.sheen_roughness_texture.has_transform ||
         trConfig.transmission_texture.has_transform;
 
     cgltf_texture_view baseColorTexture = mrConfig.base_color_texture;
@@ -914,7 +935,12 @@ MaterialInstance* FAssetLoader::createMaterialInstance(const cgltf_material* inp
         .aoUV = (uint8_t) inputMat->occlusion_texture.texcoord,
         .normalUV = (uint8_t) inputMat->normal_texture.texcoord,
         .hasTransmissionTexture = !!trConfig.transmission_texture.texture,
-        .transmissionUV = (uint8_t) trConfig.transmission_texture.texcoord
+        .transmissionUV = (uint8_t) trConfig.transmission_texture.texcoord,
+        .hasSheenColorTexture = !!shConfig.sheen_color_texture.texture,
+        .sheenColorUV = (uint8_t) shConfig.sheen_color_texture.texcoord,
+        .hasSheenRoughnessTexture = !!shConfig.sheen_roughness_texture.texture,
+        .sheenRoughnessUV = (uint8_t) shConfig.sheen_roughness_texture.texcoord,
+        .hasSheen = !!inputMat->has_sheen,
     };
 
     if (inputMat->has_pbr_specular_glossiness) {
@@ -956,12 +982,17 @@ MaterialInstance* FAssetLoader::createMaterialInstance(const cgltf_material* inp
 
     mResult->mMaterialInstances.push_back(mi);
 
-    if (inputMat->alpha_mode == cgltf_alpha_mode_mask) {
+    // Check the material blending mode, not the cgltf blending mode, because the provider
+    // might have selected an alternative blend mode (e.g. to support transmission).
+    if (mi->getMaterial()->getBlendingMode() == filament::BlendingMode::MASKED) {
         mi->setMaskThreshold(inputMat->alpha_cutoff);
     }
 
     const float* e = inputMat->emissive_factor;
-    mi->setParameter("emissiveFactor", float3(e[0], e[1], e[2]));
+    // To force emissive to bloom when emissiveFactor is at 1, we multiply by a luminance
+    // of 6EV. At 6EV, the luminance will be 2^(6-3) = 8 which is about the HDR range of
+    // our default tone mappers.
+    mi->setParameter("emissiveFactor", float3(e[0], e[1], e[2]) * Exposure::luminance(6.0f));
 
     const float* c = mrConfig.base_color_factor;
     mi->setParameter("baseColorFactor", float4(c[0], c[1], c[2], c[3]));
@@ -1063,6 +1094,29 @@ MaterialInstance* FAssetLoader::createMaterialInstance(const cgltf_material* inp
         }
     }
 
+    if (matkey.hasSheen) {
+        const float* s = shConfig.sheen_color_factor;
+        mi->setParameter("sheenColorFactor", float3{s[0], s[1], s[2]});
+        mi->setParameter("sheenRoughnessFactor", shConfig.sheen_roughness_factor);
+
+        if (matkey.hasSheenColorTexture) {
+            addTextureBinding(mi, "sheenColorMap", shConfig.sheen_color_texture.texture, true);
+            if (matkey.hasTextureTransforms) {
+                const cgltf_texture_transform& uvt = shConfig.sheen_color_texture.transform;
+                auto uvmat = matrixFromUvTransform(uvt.offset, uvt.rotation, uvt.scale);
+                mi->setParameter("sheenColorUvMatrix", uvmat);
+            }
+        }
+        if (matkey.hasSheenRoughnessTexture) {
+            addTextureBinding(mi, "sheenRoughnessMap", shConfig.sheen_roughness_texture.texture, false);
+            if (matkey.hasTextureTransforms) {
+                const cgltf_texture_transform& uvt = shConfig.sheen_roughness_texture.transform;
+                auto uvmat = matrixFromUvTransform(uvt.offset, uvt.rotation, uvt.scale);
+                mi->setParameter("sheenRoughnessUvMatrix", uvmat);
+            }
+        }
+    }
+
     if (matkey.hasTransmission) {
         mi->setParameter("transmissionFactor", trConfig.transmission_factor);
         if (matkey.hasTransmissionTexture) {
@@ -1160,13 +1214,6 @@ FilamentAsset* AssetLoader::createInstancedAsset(const uint8_t* bytes, uint32_t 
 
 FilamentInstance* AssetLoader::createInstance(FilamentAsset* asset) {
     return upcast(this)->createInstance(upcast(asset));
-}
-
-FilamentAsset* AssetLoader::createAssetFromHandle(const void* handle) {
-    const cgltf_data* sourceAsset = (const cgltf_data*) handle;
-    upcast(this)->createAsset(sourceAsset, 0);
-    upcast(this)->mResult->mSharedSourceAsset = true;
-    return upcast(this)->mResult;
 }
 
 void AssetLoader::enableDiagnostics(bool enable) {
