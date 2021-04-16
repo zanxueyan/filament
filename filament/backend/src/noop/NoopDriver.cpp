@@ -147,6 +147,10 @@ bool NoopDriver::isTextureFormatSupported(TextureFormat format) {
     return true;
 }
 
+bool NoopDriver::isVertexFormatSupported(ElementType format, uint8_t flags) {
+    return true;
+}
+
 bool NoopDriver::isTextureSwizzleSupported() {
     return true;
 }

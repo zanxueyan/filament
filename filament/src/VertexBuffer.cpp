@@ -126,10 +126,22 @@ VertexBuffer* VertexBuffer::Builder::build(Engine& engine) {
         return nullptr;
     }
 
-    // Next we check if any unused buffer slots have been allocated. This helps prevent errors
-    // because uploading to an unused slot can trigger undefined behavior in the backend.
+    // Check that all vertex formats are supported.
+    FEngine::DriverApi& driver = upcast(engine).getDriverApi();
     auto const& declaredAttributes = mImpl->mDeclaredAttributes;
     auto const& attributes = mImpl->mAttributes;
+    for (size_t j = 0; j < MAX_VERTEX_ATTRIBUTE_COUNT; ++j) {
+        if (declaredAttributes[j]) {
+            const auto& attrib = mImpl->mAttributes[j];
+            const bool supported = driver.isVertexFormatSupported(attrib.type, attrib.flags);
+            if (!ASSERT_PRECONDITION_NON_FATAL(supported, "Vertex format not supported")) {
+                return nullptr;
+            }
+        }
+    }
+
+    // Next check if any unused buffer slots have been allocated. This helps prevent errors
+    // because uploading to an unused slot can trigger undefined behavior in the backend.
     utils::bitset32 attributedBuffers;
     for (size_t j = 0; j < MAX_VERTEX_ATTRIBUTE_COUNT; ++j) {
         if (declaredAttributes[j]) {

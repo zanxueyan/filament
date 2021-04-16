@@ -1589,6 +1589,10 @@ bool OpenGLDriver::isTextureFormatSupported(TextureFormat format) {
     return getInternalFormat(format) != 0;
 }
 
+bool OpenGLDriver::isVertexFormatSupported(ElementType format, uint8_t flags) {
+    return true;
+}
+
 bool OpenGLDriver::isTextureSwizzleSupported() {
     return true;
 }

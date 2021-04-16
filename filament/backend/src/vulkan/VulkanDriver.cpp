@@ -816,6 +816,18 @@ bool VulkanDriver::isTextureFormatSupported(TextureFormat format) {
     return info.optimalTilingFeatures != 0;
 }
 
+bool VulkanDriver::isVertexFormatSupported(ElementType format, uint8_t flags) {
+    assert_invariant(mContext.physicalDevice);
+    VkFormat vkformat = getVkFormat(format, flags & Attribute::FLAG_NORMALIZED);
+    VkFormatProperties info;
+    vkGetPhysicalDeviceFormatProperties(mContext.physicalDevice, vkformat, &info);
+
+    // Workaround when device driver contains "MoltenVK"
+    // return false if vkformat is VK_FORMAT_R16G16B16_UINT
+    printf("prideout %d, %d\n", (int) vkformat, (info.bufferFeatures & VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT));
+    return (info.bufferFeatures & VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT);
+}
+
 bool VulkanDriver::isTextureSwizzleSupported() {
     return true;
 }

@@ -590,6 +590,10 @@ bool MetalDriver::isTextureFormatSupported(TextureFormat format) {
            TextureReshaper::canReshapeTextureFormat(format);
 }
 
+bool MetalDriver::isVertexFormatSupported(ElementType format, uint8_t flags) {
+    return true;
+}
+
 bool MetalDriver::isTextureSwizzleSupported() {
     return mContext->supportsTextureSwizzling;
 }
