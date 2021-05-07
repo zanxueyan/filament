@@ -156,6 +156,12 @@ class MainActivity : Activity() {
         }
     }
 
+    private suspend fun loadHdr(message: RemoteServer.ReceivedMessage) {
+        withContext(Dispatchers.Main) {
+            Log.e(TAG, "TODO: load HDR file")
+        }
+    }
+
     private suspend fun loadZip(message: RemoteServer.ReceivedMessage) {
         // To alleviate memory pressure, remove the old model before deflating the zip.
         withContext(Dispatchers.Main) {
@@ -266,6 +272,8 @@ class MainActivity : Activity() {
         CoroutineScope(Dispatchers.IO).launch {
             if (message.label.endsWith(".zip")) {
                 loadZip(message)
+            } else if (message.label.endsWith(".hdr")) {
+                loadHdr(message)
             } else {
                 loadGlb(message)
             }
