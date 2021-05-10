@@ -416,16 +416,6 @@ void VulkanPipelineCache::unbindUniformBuffer(VkBuffer uniformBuffer) noexcept {
             mDirtyDescriptor = true;
         }
     }
-    // This function is often called before deleting a uniform buffer. For safety, we need to evict
-    // all descriptors that refer to the extinct uniform buffer, regardless of the binding offsets.
-    evictDescriptors([uniformBuffer] (const DescriptorKey& key) {
-        for (VkBuffer buf : key.uniformBuffers) {
-            if (buf == uniformBuffer) {
-                return true;
-            }
-        }
-        return false;
-    });
 }
 
 void VulkanPipelineCache::unbindImageView(VkImageView imageView) noexcept {
@@ -437,40 +427,6 @@ void VulkanPipelineCache::unbindImageView(VkImageView imageView) noexcept {
     for (auto& target : mDescriptorKey.inputAttachments) {
         if (target.imageView == imageView) {
             mDirtyDescriptor = true;
-        }
-    }
-    evictDescriptors([imageView] (const DescriptorKey& key) {
-        for (const auto& binding : key.samplers) {
-            if (binding.imageView == imageView) {
-                return true;
-            }
-        }
-        for (const auto& binding : key.inputAttachments) {
-            if (binding.imageView == imageView) {
-                return true;
-            }
-        }
-        return false;
-    });
-}
-
-// Discards all descriptor sets that pass the given filter. Immediately removes the cache entries,
-// but defers calling vkFreeDescriptorSets until the next eviction cycle.
-void VulkanPipelineCache::evictDescriptors(std::function<bool(const DescriptorKey&)> filter) noexcept {
-    // Due to robin_map restrictions, we cannot use auto or a range-based loop.
-    decltype(mDescriptorBundles)::const_iterator iter;
-    for (iter = mDescriptorBundles.begin(); iter != mDescriptorBundles.end();) {
-        auto& pair = *iter;
-        if (filter(pair.first)) {
-            auto& cacheEntry = iter->second;
-            mDescriptorGraveyard.push_back({
-                .handles = { cacheEntry.handles[0], cacheEntry.handles[1], cacheEntry.handles[2] },
-                .timestamp = cacheEntry.timestamp,
-                .bound = false
-            });
-            iter = mDescriptorBundles.erase(iter);
-        } else {
-            ++iter;
         }
     }
 }
@@ -564,21 +520,6 @@ void VulkanPipelineCache::gc() noexcept {
             iter = mPipelines.erase(iter);
         } else {
             ++iter;
-        }
-    }
-    // The graveyard is composed of descriptors that contain references to extinct objects. We
-    // take care only to free the ones that are old enough to be evicted, since they might be
-    // referenced in a command buffer that hasn't finished executing.
-    decltype(mDescriptorGraveyard) graveyard;
-    graveyard.swap(mDescriptorGraveyard);
-    for (auto& val : graveyard) {
-        if (val.timestamp < evictTime) {
-           vkFreeDescriptorSets(mDevice, mDescriptorPool, 3, val.handles);
-        } else {
-            mDescriptorGraveyard.emplace_back(DescriptorBundle {
-                .handles = { val.handles[0], val.handles[1], val.handles[2] },
-                .timestamp = val.timestamp
-            });
         }
     }
 }

@@ -221,7 +221,6 @@ private:
 
     void createLayoutsAndDescriptors() noexcept;
     void destroyLayoutsAndDescriptors() noexcept;
-    void evictDescriptors(std::function<bool(const DescriptorKey&)> filter) noexcept;
 
     VkDevice mDevice = nullptr;
     const RasterState mDefaultRasterState;
@@ -248,7 +247,6 @@ private:
     tsl::robin_map<PipelineKey, PipelineVal, PipelineHashFn, PipelineEqual> mPipelines;
     tsl::robin_map<DescriptorKey, DescriptorBundle, DescHashFn, DescEqual> mDescriptorBundles;
     VkDescriptorPool mDescriptorPool;
-    std::vector<DescriptorBundle> mDescriptorGraveyard;
 
     // Store the current "time" (really just a frame count) and LRU eviction parameters.
     uint32_t mCurrentTime = 0;
