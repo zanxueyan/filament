@@ -44,20 +44,7 @@ static constexpr uint32_t MAX_DESCRIPTOR_SET_COUNT = 1500;
 static VulkanPipelineCache::RasterState createDefaultRasterState();
 
 VulkanPipelineCache::VulkanPipelineCache() : mDefaultRasterState(createDefaultRasterState()) {
-    mColorBlendState = VkPipelineColorBlendStateCreateInfo{};
-    mColorBlendState.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-    mColorBlendState.attachmentCount = 1;
-    mColorBlendState.pAttachments = mColorBlendAttachments;
-    mShaderStages[0] = VkPipelineShaderStageCreateInfo{};
-    mShaderStages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    mShaderStages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
-    mShaderStages[0].pName = "main";
-    mShaderStages[1] = VkPipelineShaderStageCreateInfo{};
-    mShaderStages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    mShaderStages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-    mShaderStages[1].pName = "main";
     resetBindings();
-
     mDescriptorKey = {};
 }
 
@@ -129,13 +116,19 @@ bool VulkanPipelineCache::getOrCreateDescriptors(VkDescriptorSet descriptorSets[
     mCurrentDescriptorBundle = &bundle;
     mDirtyDescriptor = false;
 
+    VkDescriptorBufferInfo descriptorBuffers[UBUFFER_BINDING_COUNT];
+    VkDescriptorImageInfo descriptorSamplers[SAMPLER_BINDING_COUNT];
+    VkDescriptorImageInfo descriptorInputAttachments[TARGET_BINDING_COUNT];
+    VkWriteDescriptorSet descriptorWrites[UBUFFER_BINDING_COUNT + SAMPLER_BINDING_COUNT +
+            TARGET_BINDING_COUNT];
+
     // Mutate the descriptor by setting all non-null bindings.
     uint32_t nwrites = 0;
-    VkWriteDescriptorSet* writes = mDescriptorWrites;
+    VkWriteDescriptorSet* writes = descriptorWrites;
     nwrites = 0;
     for (uint32_t binding = 0; binding < UBUFFER_BINDING_COUNT; binding++) {
         if (mDescriptorKey.uniformBuffers[binding]) {
-            VkDescriptorBufferInfo& bufferInfo = mDescriptorBuffers[binding];
+            VkDescriptorBufferInfo& bufferInfo = descriptorBuffers[binding];
             bufferInfo.buffer = mDescriptorKey.uniformBuffers[binding];
             bufferInfo.offset = mDescriptorKey.uniformBufferOffsets[binding];
             bufferInfo.range = mDescriptorKey.uniformBufferSizes[binding];
@@ -154,7 +147,7 @@ bool VulkanPipelineCache::getOrCreateDescriptors(VkDescriptorSet descriptorSets[
     }
     for (uint32_t binding = 0; binding < SAMPLER_BINDING_COUNT; binding++) {
         if (mDescriptorKey.samplers[binding].sampler) {
-            VkDescriptorImageInfo& imageInfo = mDescriptorSamplers[binding];
+            VkDescriptorImageInfo& imageInfo = descriptorSamplers[binding];
             imageInfo = mDescriptorKey.samplers[binding];
             VkWriteDescriptorSet& writeInfo = writes[nwrites++];
             writeInfo.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -171,7 +164,7 @@ bool VulkanPipelineCache::getOrCreateDescriptors(VkDescriptorSet descriptorSets[
     }
     for (uint32_t binding = 0; binding < TARGET_BINDING_COUNT; binding++) {
         if (mDescriptorKey.inputAttachments[binding].imageView) {
-            VkDescriptorImageInfo& imageInfo = mDescriptorInputAttachments[binding];
+            VkDescriptorImageInfo& imageInfo = descriptorInputAttachments[binding];
             imageInfo = mDescriptorKey.inputAttachments[binding];
             VkWriteDescriptorSet& writeInfo = writes[nwrites++];
             writeInfo.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -222,9 +215,27 @@ bool VulkanPipelineCache::getOrCreatePipeline(VkPipeline* pipeline) noexcept {
         return true;
     }
 
+    VkPipelineShaderStageCreateInfo shaderStages[SHADER_MODULE_COUNT];
+    shaderStages[0] = VkPipelineShaderStageCreateInfo{};
+    shaderStages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    shaderStages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
+    shaderStages[0].pName = "main";
+
+    shaderStages[1] = VkPipelineShaderStageCreateInfo{};
+    shaderStages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    shaderStages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+    shaderStages[1].pName = "main";
+
+    VkPipelineColorBlendAttachmentState colorBlendAttachments[MRT::MAX_SUPPORTED_RENDER_TARGET_COUNT];
+    VkPipelineColorBlendStateCreateInfo colorBlendState;
+    colorBlendState = VkPipelineColorBlendStateCreateInfo{};
+    colorBlendState.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+    colorBlendState.attachmentCount = 1;
+    colorBlendState.pAttachments = colorBlendAttachments;
+
     // If we reach this point, we need to create and stash a brand new pipeline object.
-    mShaderStages[0].module = mPipelineKey.shaders[0];
-    mShaderStages[1].module = mPipelineKey.shaders[1];
+    shaderStages[0].module = mPipelineKey.shaders[0];
+    shaderStages[1].module = mPipelineKey.shaders[1];
 
     // We don't store array sizes to save space, but it's quick to count all non-zero
     // entries because these arrays have a small fixed-size capacity.
@@ -264,7 +275,7 @@ bool VulkanPipelineCache::getOrCreatePipeline(VkPipeline* pipeline) noexcept {
     dynamicState.pDynamicStates = dynamicStateEnables;
     dynamicState.dynamicStateCount = 2;
 
-    const bool hasFragmentShader = mShaderStages[1].module != VK_NULL_HANDLE;
+    const bool hasFragmentShader = shaderStages[1].module != VK_NULL_HANDLE;
 
     VkGraphicsPipelineCreateInfo pipelineCreateInfo = {};
     pipelineCreateInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -272,26 +283,26 @@ bool VulkanPipelineCache::getOrCreatePipeline(VkPipeline* pipeline) noexcept {
     pipelineCreateInfo.renderPass = mPipelineKey.renderPass;
     pipelineCreateInfo.subpass = mPipelineKey.subpassIndex;
     pipelineCreateInfo.stageCount = hasFragmentShader ? SHADER_MODULE_COUNT : 1;
-    pipelineCreateInfo.pStages = mShaderStages;
+    pipelineCreateInfo.pStages = shaderStages;
     pipelineCreateInfo.pVertexInputState = &vertexInputState;
     pipelineCreateInfo.pInputAssemblyState = &inputAssemblyState;
     pipelineCreateInfo.pRasterizationState = &mPipelineKey.rasterState.rasterization;
-    pipelineCreateInfo.pColorBlendState = &mColorBlendState;
+    pipelineCreateInfo.pColorBlendState = &colorBlendState;
     pipelineCreateInfo.pMultisampleState = &mPipelineKey.rasterState.multisampling;
     pipelineCreateInfo.pViewportState = &viewportState;
     pipelineCreateInfo.pDepthStencilState = &mPipelineKey.rasterState.depthStencil;
     pipelineCreateInfo.pDynamicState = &dynamicState;
 
     // Filament assumes consistent blend state across all color attachments.
-    mColorBlendState.attachmentCount = mPipelineKey.rasterState.colorTargetCount;
-    for (auto& target : mColorBlendAttachments) {
+    colorBlendState.attachmentCount = mPipelineKey.rasterState.colorTargetCount;
+    for (auto& target : colorBlendAttachments) {
         target = mPipelineKey.rasterState.blending;
     }
 
     // There are no color attachments if there is no bound fragment shader.  (e.g. shadow map gen)
     // TODO: This should be handled in a higher layer.
     if (!hasFragmentShader) {
-        mColorBlendState.attachmentCount = 0;
+        colorBlendState.attachmentCount = 0;
     }
 
     #if FILAMENT_VULKAN_VERBOSE

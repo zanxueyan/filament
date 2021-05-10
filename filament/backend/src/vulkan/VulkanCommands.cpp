@@ -40,8 +40,8 @@ VulkanCmdFence::VulkanCmdFence(VkDevice device, bool signaled) : device(device) 
     vkDestroyFence(device, fence, VKALLOC);
 }
 
-VulkanCommands::VulkanCommands(VkDevice device, uint32_t queueFamilyIndex, VulkanPipelineCache& binder) :
-        mDevice(device), mBinder(binder) {
+VulkanCommands::VulkanCommands(VkDevice device, uint32_t queueFamilyIndex, VulkanPipelineCache& pipeCache) :
+        mDevice(device), mPipelineCache(pipeCache) {
     VkCommandPoolCreateInfo createInfo = {};
     createInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
     createInfo.flags =
@@ -119,7 +119,7 @@ VulkanCommandBuffer& VulkanCommands::get() {
     // TODO: consider instancing a separate VulkanPipelineCache for each element in the swap chain, which
     // would not only remove the need for this call, but would allow descriptor sets to be safely
     // mutated.
-    mBinder.resetBindings();
+    mPipelineCache.resetBindings();
 
     return *mCurrent;
 }

@@ -51,7 +51,7 @@ struct VulkanCommandBuffer {
 // Submitted command buffers form a dependency chain using VkSemaphore.
 class VulkanCommands {
     public:
-        VulkanCommands(VkDevice device, uint32_t queueFamilyIndex, VulkanPipelineCache& binder);
+        VulkanCommands(VkDevice device, uint32_t queueFamilyIndex, VulkanPipelineCache& pipeCache);
         ~VulkanCommands();
 
         // Creates a "current" command buffer if none exists, otherwise returns the current one.
@@ -82,7 +82,7 @@ class VulkanCommands {
     private:
         static constexpr int CAPACITY = VK_MAX_COMMAND_BUFFERS;
         const VkDevice mDevice;
-        VulkanPipelineCache& mBinder;
+        VulkanPipelineCache& mPipelineCache;
         VkQueue mQueue;
         VkCommandPool mPool;
         VulkanCommandBuffer* mCurrent = nullptr;

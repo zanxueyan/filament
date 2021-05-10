@@ -43,18 +43,18 @@ namespace backend {
 //
 //     void Driver::bindUniformBuffer(uint32_t index, UniformBlock block) {
 //         VkBuffer buffer = block->getGpuBuffer();
-//         mBinder.bindUniformBuffer(index, buffer);
+//         mPipelineCache.bindUniformBuffer(index, buffer);
 //     }
 //
 //     void Driver::draw(Geometry geo) {
-//        mBinder.bindPrimitiveTopology(geo.topology);
-//        mBinder.bindVertexArray(geo.varray);
+//        mPipelineCache.bindPrimitiveTopology(geo.topology);
+//        mPipelineCache.bindVertexArray(geo.varray);
 //        VkDescriptorSet descriptors[3];
-//        if (mBinder.getOrCreateDescriptors(descriptors, ...)) {
+//        if (mPipelineCache.getOrCreateDescriptors(descriptors, ...)) {
 //            vkCmdBindDescriptorSets(... descriptors ...);
 //        }
 //        VkPipeline pipeline;
-//        if (mBinder.getOrCreatePipeline(&pipeline)) {
+//        if (mPipelineCache.getOrCreatePipeline(&pipeline)) {
 //            vkCmdBindPipeline(cmdbuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
 //        }
 //        vkCmdBindVertexBuffers(cmdbuffer, geo.vbo, ...);
@@ -107,7 +107,7 @@ public:
     };
     static_assert(std::is_pod<RasterState>::value, "RasterState must be a POD for fast hashing.");
 
-    // Upon construction, the binder initializes some internal state but does not make any Vulkan
+    // Upon construction, the pipeCache initializes some internal state but does not make any Vulkan
     // calls. On destruction it will free any cached Vulkan objects that haven't already been freed
     // via resetBindings(). We don't pass the VkDevice to the constructor to allow the client to own
     // a concrete instance of Binder rather than going through a pointer.
@@ -226,16 +226,6 @@ private:
     VkDevice mDevice = nullptr;
     const RasterState mDefaultRasterState;
 
-    // These structs are used only in a transient way but are stored for convenience.
-    VkPipelineShaderStageCreateInfo mShaderStages[SHADER_MODULE_COUNT];
-    VkPipelineColorBlendStateCreateInfo mColorBlendState;
-    VkDescriptorBufferInfo mDescriptorBuffers[UBUFFER_BINDING_COUNT];
-    VkDescriptorImageInfo mDescriptorSamplers[SAMPLER_BINDING_COUNT];
-    VkDescriptorImageInfo mDescriptorInputAttachments[TARGET_BINDING_COUNT];
-    VkWriteDescriptorSet mDescriptorWrites[
-            UBUFFER_BINDING_COUNT + SAMPLER_BINDING_COUNT + TARGET_BINDING_COUNT];
-    VkPipelineColorBlendAttachmentState mColorBlendAttachments[MRT::MAX_SUPPORTED_RENDER_TARGET_COUNT];
-
     // Current bindings are divided into two "keys" which are composed of a mix of actual values
     // (e.g., blending is OFF) and weak references to Vulkan objects (e.g., shader programs and
     // uniform buffers).
@@ -251,8 +241,9 @@ private:
     bool mDirtyPipeline = true;
     bool mDirtyDescriptor = true;
 
-    // Cached Vulkan objects. These objects are owned by the Binder.
+    // Three descriptor set layouts: uniforms, combined image samplers, and input attachments.
     VkDescriptorSetLayout mDescriptorSetLayouts[3] = {};
+
     VkPipelineLayout mPipelineLayout = VK_NULL_HANDLE;
     tsl::robin_map<PipelineKey, PipelineVal, PipelineHashFn, PipelineEqual> mPipelines;
     tsl::robin_map<DescriptorKey, DescriptorBundle, DescHashFn, DescEqual> mDescriptorBundles;
